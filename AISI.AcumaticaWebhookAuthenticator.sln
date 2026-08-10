@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{00113406-32D6-4434-9EA2-E94C22488A25}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISI.AcumaticaWebhookAuthenticator.Core", "src\AISI.AcumaticaWebhookAuthenticator.Core\AISI.AcumaticaWebhookAuthenticator.Core.csproj", "{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AB5F6CD5-B243-4E12-A0E1-0681339CF862}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISI.AcumaticaWebhookAuthenticator.Core.Tests", "tests\AISI.AcumaticaWebhookAuthenticator.Core.Tests\AISI.AcumaticaWebhookAuthenticator.Core.Tests.csproj", "{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00} = {00113406-32D6-4434-9EA2-E94C22488A25}
+		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09} = {AB5F6CD5-B243-4E12-A0E1-0681339CF862}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,16 @@
+<Project>
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>AISI Dev Co</Authors>
+    <Company>AISI Dev Co</Company>
+    <Copyright>Copyright (c) 2026 AISI Dev Co</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator</RepositoryUrl>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

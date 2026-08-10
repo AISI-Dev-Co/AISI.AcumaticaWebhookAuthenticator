@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: Pack
+        run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts
+
+      # Acumatica assemblies are licensed and must never be redistributed. Acumatica's own webhook
+      # sample omits <Private>False</Private> on its PX.Api.Webhooks.Abstractions reference, which
+      # copies one into the output — this is the check that stops that mistake reaching a package.
+      - name: Assert no Acumatica assemblies in the package
+        run: |
+          set -euo pipefail
+          for pkg in ./artifacts/*.nupkg; do
+            echo "Inspecting $pkg"
+            if unzip -l "$pkg" | grep -Ei 'PX\..*\.dll'; then
+              echo "::error::$pkg contains an Acumatica assembly"
+              exit 1
+            fi
+          done
+          echo "No Acumatica assemblies found."
