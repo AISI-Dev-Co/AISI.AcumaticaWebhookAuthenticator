@@ -14,12 +14,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// <para>
     /// Rotation is not an edge case. A sender rotating its signing secret emits requests signed with
     /// either the old or the new one for the length of the overlap window, and a verifier that knows
-    /// only one of them drops roughly half the traffic for the duration. Verification tries the
-    /// current secret first, then the rotating secret if one is present and unexpired.
+    /// only one of them drops roughly half the traffic for the duration.
     /// </para>
     /// <para>
-    /// Which of the two matched is not reported. It is not needed operationally and reporting it
-    /// would turn verification into an oracle for which secret is live.
+    /// Key material never leaves this type. Verification happens in <see cref="Matches"/> rather
+    /// than by handing the caller the bytes, so there is no reference an unrelated component can
+    /// hold on to or mutate, and every candidate is evaluated even after one has matched — an early
+    /// return would leak through timing which of the two secrets is live.
     /// </para>
     /// </remarks>
     public sealed class WebhookSecret
@@ -36,7 +37,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
-        /// Creates a secret from raw key bytes.
+        /// Creates a secret from raw key bytes. The array is copied, so later mutation by the caller
+        /// cannot change what this secret verifies against.
         /// </summary>
         /// <param name="current">The active secret.</param>
         /// <returns>The secret.</returns>
@@ -48,7 +50,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentNullException(nameof(current));
             }
 
-            return new WebhookSecret(current, null, null);
+            return new WebhookSecret(Copy(current), null, null);
         }
 
         /// <summary>
@@ -65,7 +67,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentNullException(nameof(current));
             }
 
-            return FromBytes(Encoding.UTF8.GetBytes(current));
+            return new WebhookSecret(Encoding.UTF8.GetBytes(current), null, null);
         }
 
         /// <summary>
@@ -81,7 +83,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new FormatException("The secret is not valid hexadecimal.");
             }
 
-            return FromBytes(bytes);
+            return new WebhookSecret(bytes, null, null);
         }
 
         /// <summary>
@@ -97,7 +99,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new FormatException("The secret is not valid base64.");
             }
 
-            return FromBytes(bytes);
+            return new WebhookSecret(bytes, null, null);
         }
 
         /// <summary>
@@ -117,7 +119,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentNullException(nameof(rotating));
             }
 
-            return new WebhookSecret(_current, rotating, expiresOn);
+            return new WebhookSecret(_current, Copy(rotating), expiresOn);
         }
 
         /// <summary>
@@ -134,73 +136,88 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentNullException(nameof(rotating));
             }
 
-            return WithRotating(Encoding.UTF8.GetBytes(rotating), expiresOn);
+            return new WebhookSecret(_current, Encoding.UTF8.GetBytes(rotating), expiresOn);
         }
 
         /// <summary>
-        /// The secrets to verify against, in priority order, at a given instant.
+        /// Whether <paramref name="providedDigest"/> is a valid signature of
+        /// <paramref name="message"/> under any secret live at <paramref name="asOf"/>.
         /// </summary>
+        /// <param name="algorithm">Hash algorithm.</param>
+        /// <param name="message">The exact bytes the sender signed.</param>
+        /// <param name="providedDigest">The digest supplied on the request.</param>
         /// <param name="asOf">The instant to evaluate the rotation window against.</param>
-        /// <returns>The current secret, then the rotating secret when it is present and unexpired.</returns>
-        public IReadOnlyList<byte[]> CandidatesAsOf(DateTimeOffset asOf)
+        /// <returns><see langword="true"/> when the signature is valid.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
+        public bool Matches(HmacAlgorithm algorithm, byte[] message, byte[]? providedDigest, DateTimeOffset asOf)
         {
-            if (_rotating is null || _rotatingExpiresOn is null || asOf > _rotatingExpiresOn.Value)
+            if (message is null)
             {
-                return new[] { _current };
+                throw new ArgumentNullException(nameof(message));
             }
 
-            return new[] { _current, _rotating };
-        }
-    }
+            bool matched = false;
 
-    /// <summary>
-    /// Supplies the signing secret for an endpoint.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The interface exists so that secret storage is a deployment decision rather than a library
-    /// one. The intended production implementation reads a <c>[PXRSACryptString]</c> field from the
-    /// ERP database, which is Acumatica's own pattern for third-party integration credentials: it is
-    /// encrypted at rest, it is editable by an administrator without a redeployment, it survives the
-    /// platform's move off .NET Framework because it is an ORM concern rather than a configuration
-    /// file one, and it is the only option that works on SaaS, where there is no file system and no
-    /// environment to read.
-    /// </para>
-    /// <para>
-    /// Implementations are called once per request and should cache accordingly.
-    /// </para>
-    /// </remarks>
-    public interface IWebhookSecretProvider
-    {
+            // Deliberately not short-circuited. Returning on the first hit would make a request
+            // signed with the current secret measurably faster than one signed with the rotating
+            // secret, which tells an observer which is which.
+            foreach (byte[] key in LiveKeys(asOf))
+            {
+                matched |= FixedTimeComparer.AreEqual(HmacComputer.Compute(algorithm, key, message), providedDigest);
+            }
+
+            return matched;
+        }
+
         /// <summary>
-        /// Returns the secret to verify against, or <see langword="null"/> when none is configured.
-        /// A null return denies the request; it never falls back to unauthenticated handling.
+        /// Computes the digests this secret would produce, for display by
+        /// <see cref="Diagnostics.WebhookSignatureTester"/>.
         /// </summary>
-        /// <returns>The secret, or <see langword="null"/>.</returns>
-        WebhookSecret? GetSecret();
-    }
-
-    /// <summary>
-    /// An <see cref="IWebhookSecretProvider"/> over a secret already in memory.
-    /// </summary>
-    /// <remarks>
-    /// Intended for tests and for the signature tester. Using it in production means a secret
-    /// compiled into an assembly, which cannot be rotated without a redeployment and will be
-    /// recoverable by anyone who can read the DLL.
-    /// </remarks>
-    public sealed class StaticSecretProvider : IWebhookSecretProvider
-    {
-        private readonly WebhookSecret _secret;
-
-        /// <summary>Creates a provider over a fixed secret.</summary>
-        /// <param name="secret">The secret to return.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="secret"/> is null.</exception>
-        public StaticSecretProvider(WebhookSecret secret)
+        /// <param name="algorithm">Hash algorithm.</param>
+        /// <param name="message">The bytes to sign.</param>
+        /// <param name="asOf">The instant to evaluate the rotation window against.</param>
+        /// <returns>One digest per live secret: the current one first, then the rotating one.</returns>
+        /// <remarks>
+        /// This is the only member that yields anything derived from the key to a caller, and it
+        /// exists solely so an administrator with access to the secret can see why a signature did
+        /// not match. Never expose its output over HTTP.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
+        public IReadOnlyList<byte[]> ComputeDiagnosticDigests(
+            HmacAlgorithm algorithm,
+            byte[] message,
+            DateTimeOffset asOf)
         {
-            _secret = secret ?? throw new ArgumentNullException(nameof(secret));
+            if (message is null)
+            {
+                throw new ArgumentNullException(nameof(message));
+            }
+
+            var digests = new List<byte[]>(2);
+
+            foreach (byte[] key in LiveKeys(asOf))
+            {
+                digests.Add(HmacComputer.Compute(algorithm, key, message));
+            }
+
+            return digests;
         }
 
-        /// <inheritdoc/>
-        public WebhookSecret? GetSecret() => _secret;
+        private static byte[] Copy(byte[] source)
+        {
+            var copy = new byte[source.Length];
+            Buffer.BlockCopy(source, 0, copy, 0, source.Length);
+            return copy;
+        }
+
+        private IEnumerable<byte[]> LiveKeys(DateTimeOffset asOf)
+        {
+            yield return _current;
+
+            if (_rotating is object && _rotatingExpiresOn is object && asOf <= _rotatingExpiresOn.Value)
+            {
+                yield return _rotating;
+            }
+        }
     }
 }

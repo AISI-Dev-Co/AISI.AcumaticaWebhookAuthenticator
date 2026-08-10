@@ -1,5 +1,6 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
+using System;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
 using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
@@ -22,8 +23,30 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 Request(GoodSignature));
 
             Assert.True(report.Matched);
-            Assert.Equal(GoodSignature, report.ExpectedSignature);
+            Assert.Equal(GoodSignature, Assert.Single(report.ExpectedSignatures));
             Assert.Equal(GoodSignature, Assert.Single(report.ProvidedSignatures));
+        }
+
+        [Fact]
+        public void DuringRotation_ItReportsBothAcceptableSignatures()
+        {
+            // Reporting only the current secret's digest made a request legitimately signed with the
+            // retiring secret display as matched next to an expected value found nowhere on it.
+            const string retiringSignature =
+                "sha256=e7f4750c1d0580871565739b45147585cd7f2622003135f604ae5d6aac8f9577";
+
+            WebhookSecret secret = WebhookSecret
+                .FromUtf8(Secret)
+                .WithRotatingUtf8("old-secret", DateTimeOffset.UnixEpoch.AddDays(1));
+
+            SignatureTestReport report = WebhookSignatureTester.Test(
+                WebhookAuthPresets.GitHub(new StaticSecretProvider(secret)),
+                Request(retiringSignature));
+
+            Assert.True(report.Matched);
+            Assert.Equal(2, report.ExpectedSignatures.Count);
+            Assert.Contains(retiringSignature, report.ExpectedSignatures);
+            Assert.Contains(GoodSignature, report.ExpectedSignatures);
         }
 
         [Fact]
@@ -38,7 +61,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
             Assert.False(report.Matched);
             Assert.Equal(AuthFailureCode.SignatureMismatch, report.FailureCode);
-            Assert.NotEqual(report.ExpectedSignature, Assert.Single(report.ProvidedSignatures));
+            Assert.DoesNotContain(Assert.Single(report.ProvidedSignatures), report.ExpectedSignatures);
             Assert.Equal(Body, report.SignedPayloadPreview);
             Assert.Equal("{body}", report.TemplatePattern);
         }

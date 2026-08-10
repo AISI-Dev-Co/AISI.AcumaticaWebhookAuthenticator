@@ -53,7 +53,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
             for (int i = 0; i < left.Length; i++)
             {
-                accumulator |= left[i] - right[i];
+                // XOR, not subtraction: the difference of two bytes is a signed quantity whose sign
+                // bit sets high bits in the accumulator, which happens to work but obscures the
+                // invariant. XOR yields zero if and only if the bytes are equal.
+                accumulator |= left[i] ^ right[i];
             }
 
             return accumulator == 0;

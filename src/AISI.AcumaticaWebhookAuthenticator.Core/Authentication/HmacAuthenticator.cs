@@ -25,9 +25,44 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// </summary>
         /// <param name="options">Scheme configuration.</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
+        /// <exception cref="ArgumentException">
+        /// The template and the replay window disagree about whether a timestamp exists. Both
+        /// directions are rejected, at construction rather than per request:
+        /// <list type="bullet">
+        /// <item>
+        /// A replay window over a timestamp the template does not sign is security theatre — the
+        /// signature does not cover it, so a replayer rewrites it and sails through.
+        /// </item>
+        /// <item>
+        /// A template that signs a timestamp with no window configured would fail every request with
+        /// <see cref="AuthFailureCode.TimestampMissing"/>, which reads as a sender problem rather
+        /// than the configuration error it is.
+        /// </item>
+        /// </list>
+        /// </exception>
         public HmacAuthenticator(HmacAuthOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+
+            if (options.Timestamp is object && !options.Template.ReferencesTimestamp)
+            {
+                throw new ArgumentException(
+                    "A replay window is configured but the signed-payload template '" +
+                    options.Template.Pattern +
+                    "' does not include a {timestamp} token, so the signature would not cover the " +
+                    "timestamp being validated. Add {timestamp} to the template, or drop the window.",
+                    nameof(options));
+            }
+
+            if (options.Timestamp is null && options.Template.ReferencesTimestamp)
+            {
+                throw new ArgumentException(
+                    "The signed-payload template '" +
+                    options.Template.Pattern +
+                    "' includes a {timestamp} token but no timestamp source is configured, so no " +
+                    "request could ever be verified. Set HmacAuthOptions.Timestamp.",
+                    nameof(options));
+            }
         }
 
         /// <inheritdoc/>
@@ -52,7 +87,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(AuthFailureCode.SignatureElementMissing);
             }
 
-            string? timestampRaw = _options.Timestamp?.ReadRaw(context, headerValue, _options.Extraction);
+            string? timestampRaw = _options.Timestamp?.ReadRaw(context, headerValue);
 
             TemplateResolution resolution = _options.Template.Resolve(context, timestampRaw);
             if (!resolution.Success)
@@ -64,21 +99,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             if (secret is null)
             {
                 // A missing secret denies the request. It never degrades to unauthenticated
-                // handling, which would turn a misconfiguration into an open endpoint.
+                // handling, which would turn a blank secret field into an open endpoint.
                 return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
             }
 
-            IReadOnlyList<byte[]> keys = secret.CandidatesAsOf(context.ReceivedOn);
-            string failureCode = AuthFailureCode.SignatureMismatch;
-            bool reachedComparison = false;
+            bool matched = false;
+            bool anyWellFormed = false;
+            string rejectionCode = AuthFailureCode.SignatureMismatch;
 
             foreach (string candidate in candidates)
             {
                 if (!TryStripPrefix(candidate, out string encodedSignature))
                 {
-                    if (!reachedComparison)
+                    if (!anyWellFormed)
                     {
-                        failureCode = AuthFailureCode.SignaturePrefixMismatch;
+                        rejectionCode = AuthFailureCode.SignaturePrefixMismatch;
                     }
 
                     continue;
@@ -86,34 +121,28 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
                 if (!SignatureCodec.TryDecode(encodedSignature, _options.Encoding, out byte[] provided))
                 {
-                    if (!reachedComparison)
+                    if (!anyWellFormed)
                     {
-                        failureCode = AuthFailureCode.SignatureMalformed;
+                        rejectionCode = AuthFailureCode.SignatureMalformed;
                     }
 
                     continue;
                 }
 
-                reachedComparison = true;
-                failureCode = AuthFailureCode.SignatureMismatch;
-
-                foreach (byte[] key in keys)
-                {
-                    byte[] expected = HmacComputer.Compute(_options.Algorithm, key, resolution.Bytes);
-
-                    if (FixedTimeComparer.AreEqual(expected, provided))
-                    {
-                        // The signature is only now trustworthy, so the replay window is evaluated
-                        // after it and not before: until this point the timestamp is attacker-supplied
-                        // data that nothing has vouched for.
-                        return _options.Timestamp is null
-                            ? AuthResult.Success()
-                            : _options.Timestamp.Validate(timestampRaw, context.ReceivedOn);
-                    }
-                }
+                anyWellFormed = true;
+                matched |= secret.Matches(_options.Algorithm, resolution.Bytes, provided, context.ReceivedOn);
             }
 
-            return AuthResult.Fail(failureCode);
+            if (!matched)
+            {
+                return AuthResult.Fail(anyWellFormed ? AuthFailureCode.SignatureMismatch : rejectionCode);
+            }
+
+            // Only now is the timestamp trustworthy. Validating the window earlier would mean acting
+            // on a value nothing has vouched for.
+            return _options.Timestamp is null
+                ? AuthResult.Success()
+                : _options.Timestamp.Validate(timestampRaw, context.ReceivedOn);
         }
 
         private bool TryStripPrefix(string candidate, out string signature)

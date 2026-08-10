@@ -39,6 +39,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         {
             Pattern = pattern;
             _segments = segments;
+
+            foreach (Segment segment in segments)
+            {
+                if (segment.Kind == SegmentKind.Timestamp)
+                {
+                    ReferencesTimestamp = true;
+                    break;
+                }
+            }
         }
 
         /// <summary>The body alone. The most common convention; GitHub and Shopify both use it.</summary>
@@ -49,6 +58,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
         /// <summary>The template string this was parsed from.</summary>
         public string Pattern { get; }
+
+        /// <summary>
+        /// Whether the template includes a <c>{timestamp}</c> token, and therefore whether a replay
+        /// window over that timestamp would actually be covered by the signature.
+        /// </summary>
+        public bool ReferencesTimestamp { get; }
 
         /// <summary>
         /// Parses a template.
@@ -135,9 +150,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         /// has no timestamp. The raw form matters: a sender signs the characters it sent, so
         /// re-formatting a parsed timestamp would produce a different signed payload.
         /// </param>
+        /// <param name="capturePreview">
+        /// Whether to build the human-readable rendering as well. Off by default: the preview decodes
+        /// the entire body to a string, which on the verification path is a full extra copy of every
+        /// payload allocated for a diagnostic nobody reads. Only
+        /// <see cref="Diagnostics.WebhookSignatureTester"/> asks for it.
+        /// </param>
         /// <returns>The resolution, successful or otherwise.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
-        public TemplateResolution Resolve(WebhookAuthContext context, string? timestampRaw)
+        public TemplateResolution Resolve(WebhookAuthContext context, string? timestampRaw, bool capturePreview = false)
         {
             if (context is null)
             {
@@ -145,14 +166,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
             }
 
             var buffer = new MemoryStream();
-            var preview = new StringBuilder();
+            StringBuilder? preview = capturePreview ? new StringBuilder() : null;
 
             foreach (Segment segment in _segments)
             {
                 if (segment.Kind == SegmentKind.Body)
                 {
                     buffer.Write(context.Body, 0, context.Body.Length);
-                    preview.Append(SafeUtf8Preview(context.Body));
+
+                    // Lossy by design, and only ever for display: the digest is computed from the
+                    // bytes written above, never from this string.
+                    preview?.Append(Encoding.UTF8.GetString(context.Body));
                     continue;
                 }
 
@@ -163,10 +187,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
                 byte[] encoded = Encoding.UTF8.GetBytes(text);
                 buffer.Write(encoded, 0, encoded.Length);
-                preview.Append(text);
+                preview?.Append(text);
             }
 
-            return TemplateResolution.Succeeded(buffer.ToArray(), preview.ToString());
+            return TemplateResolution.Succeeded(buffer.ToArray(), preview?.ToString() ?? string.Empty);
         }
 
         private static bool TryResolveScalar(
@@ -268,13 +292,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                             "Unknown token '{{{0}}}' in signed-payload template. Supported tokens are {{body}}, {{timestamp}}, {{method}}, {{path}} and {{header:Name}}.",
                             token));
             }
-        }
-
-        private static string SafeUtf8Preview(byte[] body)
-        {
-            // Preview is for human diagnosis only and never feeds the digest, so a lossy decode of a
-            // non-UTF-8 body is acceptable here in a way it would never be during signing.
-            return Encoding.UTF8.GetString(body);
         }
 
         private enum SegmentKind

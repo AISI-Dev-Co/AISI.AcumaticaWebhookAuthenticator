@@ -12,17 +12,23 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public readonly struct AuthResult
     {
+        private readonly string? _failureCode;
+
         private AuthResult(bool succeeded, string failureCode)
         {
             Succeeded = succeeded;
-            FailureCode = failureCode;
+            _failureCode = failureCode;
         }
 
         /// <summary>Whether the request authenticated.</summary>
         public bool Succeeded { get; }
 
-        /// <summary>An <see cref="Diagnostics.AuthFailureCode"/> value when it did not, otherwise empty.</summary>
-        public string FailureCode { get; }
+        /// <summary>
+        /// An <see cref="Diagnostics.AuthFailureCode"/> value when it did not, otherwise empty.
+        /// Never empty-versus-null: a default-constructed result reports an unspecified failure
+        /// rather than a null string.
+        /// </summary>
+        public string FailureCode => _failureCode ?? Diagnostics.AuthFailureCode.Unspecified;
 
         /// <summary>Creates a successful result.</summary>
         /// <returns>The result.</returns>
@@ -32,24 +38,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <param name="failureCode">An <see cref="Diagnostics.AuthFailureCode"/> value.</param>
         /// <returns>The result.</returns>
         public static AuthResult Fail(string failureCode) => new AuthResult(false, failureCode);
-    }
-
-    /// <summary>
-    /// A strategy for authenticating an inbound webhook request.
-    /// </summary>
-    public interface IWebhookAuthenticator
-    {
-        /// <summary>
-        /// Short stable identifier for the scheme, e.g. "HMAC". Recorded against the endpoint
-        /// configuration and in traces.
-        /// </summary>
-        string Code { get; }
-
-        /// <summary>
-        /// Authenticates a request.
-        /// </summary>
-        /// <param name="context">The request.</param>
-        /// <returns>The outcome.</returns>
-        AuthResult Authenticate(WebhookAuthContext context);
     }
 }

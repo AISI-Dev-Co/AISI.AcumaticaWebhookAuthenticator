@@ -7,18 +7,6 @@ using System.Text;
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
     /// <summary>
-    /// Wire encoding a sender uses to represent a signature digest in a header value.
-    /// </summary>
-    public enum SignatureEncoding
-    {
-        /// <summary>Lowercase hexadecimal. Used by GitHub and Stripe.</summary>
-        Hex = 0,
-
-        /// <summary>Standard base64 with padding. Used by Shopify.</summary>
-        Base64 = 1,
-    }
-
-    /// <summary>
     /// Encodes and decodes signature digests.
     /// </summary>
     /// <remarks>
@@ -67,7 +55,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         /// </summary>
         /// <param name="value">Encoded signature, as it appeared in the header.</param>
         /// <param name="encoding">Wire encoding to decode from.</param>
-        /// <param name="digest">Decoded digest bytes when decoding succeeds.</param>
+        /// <param name="digest">Decoded digest bytes when decoding succeeds; empty otherwise.</param>
         /// <returns>
         /// <see langword="false"/> when the value is absent or malformed. A malformed signature is
         /// never an exception: it is an authentication failure like any other, and throwing here
@@ -88,18 +76,25 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     return TryDecodeHex(value!, out digest);
 
                 case SignatureEncoding.Base64:
-                    try
-                    {
-                        digest = Convert.FromBase64String(value!);
-                        return true;
-                    }
-                    catch (FormatException)
-                    {
-                        return false;
-                    }
+                    return TryDecodeBase64(value!, out digest);
 
                 default:
                     return false;
+            }
+        }
+
+        private static bool TryDecodeBase64(string value, out byte[] digest)
+        {
+            digest = Array.Empty<byte>();
+
+            try
+            {
+                digest = Convert.FromBase64String(value);
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
             }
         }
 

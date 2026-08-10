@@ -51,5 +51,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
         /// <summary>No usable secret was available: none configured, or the only candidate had expired.</summary>
         public const string SecretUnavailable = "secret_unavailable";
+
+        /// <summary>
+        /// A failure with no more specific code. Reported by a default-constructed
+        /// <see cref="Authentication.AuthResult"/>, which no code path should produce.
+        /// </summary>
+        public const string Unspecified = "unspecified";
     }
 }

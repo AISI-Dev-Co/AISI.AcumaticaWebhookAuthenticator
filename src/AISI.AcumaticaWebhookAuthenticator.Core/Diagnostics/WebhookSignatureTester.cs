@@ -18,7 +18,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
     /// produced, here is what the sender sent.
     /// </para>
     /// <para>
-    /// <strong>The report contains the expected signature and must never be returned in an HTTP
+    /// <strong>The report contains the expected signatures and must never be returned in an HTTP
     /// response.</strong> It is for an administrative screen or a developer's test, where the viewer
     /// already has access to the secret. Handing it to a caller would let them derive a valid
     /// signature for a payload of their choosing.
@@ -47,31 +47,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
             context.TryGetHeader(options.SignatureHeader, out string headerValue);
             IReadOnlyList<string> provided = options.Extraction.Extract(headerValue);
-            string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValue, options.Extraction);
+            string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValue);
 
-            TemplateResolution resolution = options.Template.Resolve(context, timestampRaw);
+            TemplateResolution resolution = options.Template.Resolve(context, timestampRaw, capturePreview: true);
             AuthResult outcome = new HmacAuthenticator(options).Authenticate(context);
-
-            string expected = string.Empty;
-            if (resolution.Success)
-            {
-                WebhookSecret? secret = options.SecretProvider.GetSecret();
-                if (secret is not null)
-                {
-                    IReadOnlyList<byte[]> keys = secret.CandidatesAsOf(context.ReceivedOn);
-                    if (keys.Count > 0)
-                    {
-                        expected = SignatureCodec.Encode(
-                            HmacComputer.Compute(options.Algorithm, keys[0], resolution.Bytes),
-                            options.Encoding);
-
-                        if (!string.IsNullOrEmpty(options.SignaturePrefix))
-                        {
-                            expected = options.SignaturePrefix + expected;
-                        }
-                    }
-                }
-            }
 
             return new SignatureTestReport(
                 outcome.Succeeded,
@@ -79,54 +58,38 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 options.Template.Pattern,
                 resolution.Preview,
                 timestampRaw,
-                expected,
+                ExpectedSignatures(options, context, resolution),
                 provided);
         }
-    }
 
-    /// <summary>
-    /// What the signature tester found. See the warning on <see cref="WebhookSignatureTester"/>
-    /// before displaying this anywhere.
-    /// </summary>
-    public sealed class SignatureTestReport
-    {
-        internal SignatureTestReport(
-            bool matched,
-            string failureCode,
-            string templatePattern,
-            string signedPayloadPreview,
-            string? timestampRaw,
-            string expectedSignature,
-            IReadOnlyList<string> providedSignatures)
+        private static IReadOnlyList<string> ExpectedSignatures(
+            HmacAuthOptions options,
+            WebhookAuthContext context,
+            TemplateResolution resolution)
         {
-            Matched = matched;
-            FailureCode = failureCode;
-            TemplatePattern = templatePattern;
-            SignedPayloadPreview = signedPayloadPreview;
-            TimestampRaw = timestampRaw;
-            ExpectedSignature = expectedSignature;
-            ProvidedSignatures = providedSignatures;
+            if (!resolution.Success)
+            {
+                return Array.Empty<string>();
+            }
+
+            WebhookSecret? secret = options.SecretProvider.GetSecret();
+            if (secret is null)
+            {
+                return Array.Empty<string>();
+            }
+
+            IReadOnlyList<byte[]> digests = secret.ComputeDiagnosticDigests(
+                options.Algorithm,
+                resolution.Bytes,
+                context.ReceivedOn);
+
+            var rendered = new List<string>(digests.Count);
+            foreach (byte[] digest in digests)
+            {
+                rendered.Add((options.SignaturePrefix ?? string.Empty) + SignatureCodec.Encode(digest, options.Encoding));
+            }
+
+            return rendered;
         }
-
-        /// <summary>Whether the request authenticated.</summary>
-        public bool Matched { get; }
-
-        /// <summary>An <see cref="AuthFailureCode"/> value when it did not.</summary>
-        public string FailureCode { get; }
-
-        /// <summary>The template that was applied.</summary>
-        public string TemplatePattern { get; }
-
-        /// <summary>The string the template produced, as far as it can be rendered readably.</summary>
-        public string SignedPayloadPreview { get; }
-
-        /// <summary>The timestamp as it was read off the wire, when the scheme uses one.</summary>
-        public string? TimestampRaw { get; }
-
-        /// <summary>The signature this configuration computed, with any configured prefix applied.</summary>
-        public string ExpectedSignature { get; }
-
-        /// <summary>The signatures found on the request.</summary>
-        public IReadOnlyList<string> ProvidedSignatures { get; }
     }
 }

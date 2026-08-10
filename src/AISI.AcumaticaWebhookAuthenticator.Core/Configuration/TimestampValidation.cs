@@ -1,6 +1,7 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
@@ -8,37 +9,36 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
     /// <summary>
-    /// Wire format of a signed timestamp.
-    /// </summary>
-    public enum TimestampFormat
-    {
-        /// <summary>Seconds since the Unix epoch. Stripe and most others.</summary>
-        UnixSeconds = 0,
-
-        /// <summary>Milliseconds since the Unix epoch.</summary>
-        UnixMilliseconds = 1,
-
-        /// <summary>An ISO 8601 / RFC 3339 instant.</summary>
-        Iso8601 = 2,
-    }
-
-    /// <summary>
     /// Where the signed timestamp comes from and how wide the replay window is.
     /// </summary>
     /// <remarks>
     /// The timestamp is only meaningful when it is <em>inside the signed payload</em>. Validating a
-    /// timestamp that the signature does not cover achieves nothing, because an attacker replaying a
-    /// captured request can rewrite it freely.
+    /// timestamp the signature does not cover achieves nothing, because an attacker replaying a
+    /// captured request can rewrite it freely. <see cref="Authentication.HmacAuthenticator"/>
+    /// enforces the pairing at construction: configuring this without a <c>{timestamp}</c> token in
+    /// the template is rejected outright.
     /// </remarks>
     public sealed class TimestampValidation
     {
-        private readonly string _source;
-        private readonly bool _fromSignatureHeader;
+        private readonly string? _headerName;
+        private readonly SignatureExtraction? _signatureHeaderElement;
 
-        private TimestampValidation(string source, bool fromSignatureHeader, TimestampFormat format, TimeSpan tolerance)
+        private TimestampValidation(
+            string? headerName,
+            SignatureExtraction? signatureHeaderElement,
+            TimestampFormat format,
+            TimeSpan tolerance)
         {
-            _source = source;
-            _fromSignatureHeader = fromSignatureHeader;
+            if (tolerance < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(tolerance),
+                    tolerance,
+                    "The replay tolerance cannot be negative; a negative window rejects every request.");
+            }
+
+            _headerName = headerName;
+            _signatureHeaderElement = signatureHeaderElement;
             Format = format;
             Tolerance = tolerance;
         }
@@ -46,19 +46,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <summary>Wire format of the timestamp.</summary>
         public TimestampFormat Format { get; }
 
-        /// <summary>
-        /// How far from the receipt time a request may be, in either direction.
-        /// </summary>
+        /// <summary>How far from the receipt time a request may be, in either direction.</summary>
         public TimeSpan Tolerance { get; }
 
         /// <summary>
         /// The timestamp is carried in its own header.
         /// </summary>
         /// <param name="headerName">Header name.</param>
-        /// <param name="tolerance">Replay window either side of receipt.</param>
+        /// <param name="tolerance">Replay window either side of receipt. Must not be negative.</param>
         /// <param name="format">Wire format. Defaults to Unix seconds.</param>
         /// <returns>The validation configuration.</returns>
         /// <exception cref="ArgumentException"><paramref name="headerName"/> is null or blank.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="tolerance"/> is negative.</exception>
         public static TimestampValidation FromHeader(
             string headerName,
             TimeSpan tolerance,
@@ -69,7 +68,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentException("A header name is required.", nameof(headerName));
             }
 
-            return new TimestampValidation(headerName, false, format, tolerance);
+            return new TimestampValidation(headerName, null, format, tolerance);
         }
 
         /// <summary>
@@ -77,55 +76,54 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <c>t=</c>.
         /// </summary>
         /// <param name="elementKey">Element name within the signature header.</param>
-        /// <param name="tolerance">Replay window either side of receipt.</param>
+        /// <param name="tolerance">Replay window either side of receipt. Must not be negative.</param>
         /// <param name="format">Wire format. Defaults to Unix seconds.</param>
+        /// <param name="pairSeparator">Separator between elements. Defaults to ','.</param>
+        /// <param name="keyValueSeparator">Separator between an element's name and value. Defaults to '='.</param>
         /// <returns>The validation configuration.</returns>
         /// <exception cref="ArgumentException"><paramref name="elementKey"/> is null or blank.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="tolerance"/> is negative.</exception>
         public static TimestampValidation FromSignatureHeaderElement(
             string elementKey,
             TimeSpan tolerance,
-            TimestampFormat format = TimestampFormat.UnixSeconds)
+            TimestampFormat format = TimestampFormat.UnixSeconds,
+            char pairSeparator = ',',
+            char keyValueSeparator = '=')
         {
-            if (string.IsNullOrWhiteSpace(elementKey))
-            {
-                throw new ArgumentException("An element key is required.", nameof(elementKey));
-            }
+            // The separators are bound here rather than borrowed from the signature extraction at
+            // read time. An earlier revision passed them in and then ignored them, which meant a
+            // sender using anything other than ',' and '=' silently lost its timestamp.
+            SignatureExtraction element = SignatureExtraction.KeyValueElement(
+                elementKey,
+                pairSeparator,
+                keyValueSeparator);
 
-            return new TimestampValidation(elementKey, true, format, tolerance);
+            return new TimestampValidation(null, element, format, tolerance);
         }
 
         /// <summary>
         /// Reads the raw timestamp text for this configuration.
         /// </summary>
         /// <param name="context">The request.</param>
-        /// <param name="signatureHeaderValue">The signature header value, needed when the timestamp lives inside it.</param>
-        /// <param name="separators">Separators to use when reading an element out of the signature header.</param>
+        /// <param name="signatureHeaderValue">
+        /// The signature header value, needed when the timestamp lives inside it.
+        /// </param>
         /// <returns>The raw text, or <see langword="null"/> when absent.</returns>
-        public string? ReadRaw(WebhookAuthContext context, string? signatureHeaderValue, SignatureExtraction separators)
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+        public string? ReadRaw(WebhookAuthContext context, string? signatureHeaderValue)
         {
             if (context is null)
             {
                 throw new ArgumentNullException(nameof(context));
             }
 
-            if (separators is null)
+            if (_headerName is object)
             {
-                throw new ArgumentNullException(nameof(separators));
+                return context.TryGetHeader(_headerName, out string value) ? value : null;
             }
 
-            if (!_fromSignatureHeader)
-            {
-                return context.TryGetHeader(_source, out string value) ? value : null;
-            }
-
-            foreach (string candidate in SignatureExtraction
-                .KeyValueElement(_source)
-                .Extract(signatureHeaderValue))
-            {
-                return candidate;
-            }
-
-            return null;
+            IReadOnlyList<string> elements = _signatureHeaderElement!.Extract(signatureHeaderValue);
+            return elements.Count > 0 ? elements[0] : null;
         }
 
         /// <summary>

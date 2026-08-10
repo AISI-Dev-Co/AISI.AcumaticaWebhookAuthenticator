@@ -87,17 +87,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// Looks up a header by name, case-insensitively.
         /// </summary>
         /// <param name="name">Header name.</param>
-        /// <param name="value">The header value when present.</param>
+        /// <param name="value">
+        /// The header value when present, otherwise <see cref="string.Empty"/>. Never null, so a
+        /// caller that ignores the return value cannot end up passing null onward.
+        /// </param>
         /// <returns><see langword="true"/> when the header is present.</returns>
         public bool TryGetHeader(string name, out string value)
         {
-            if (name is null)
+            if (name is object && _headers.TryGetValue(name, out string found))
             {
-                value = string.Empty;
-                return false;
+                value = found;
+                return true;
             }
 
-            return _headers.TryGetValue(name, out value!);
+            value = string.Empty;
+            return false;
         }
     }
 }

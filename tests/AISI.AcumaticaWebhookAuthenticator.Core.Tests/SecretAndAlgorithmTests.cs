@@ -147,14 +147,30 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void SecretsCanBeSuppliedAsHexOrBase64()
         {
             byte[] key = { 0xDE, 0xAD, 0xBE, 0xEF };
+            byte[] message = System.Text.Encoding.UTF8.GetBytes(Body);
+            byte[] digest = HmacComputer.Compute(HmacAlgorithm.Sha256, key, message);
 
-            Assert.Equal(
-                WebhookSecret.FromBytes(key).CandidatesAsOf(DateTimeOffset.UnixEpoch)[0],
-                WebhookSecret.FromHex("deadbeef").CandidatesAsOf(DateTimeOffset.UnixEpoch)[0]);
+            Assert.True(WebhookSecret.FromBytes(key)
+                .Matches(HmacAlgorithm.Sha256, message, digest, DateTimeOffset.UnixEpoch));
+            Assert.True(WebhookSecret.FromHex("deadbeef")
+                .Matches(HmacAlgorithm.Sha256, message, digest, DateTimeOffset.UnixEpoch));
+            Assert.True(WebhookSecret.FromBase64(Convert.ToBase64String(key))
+                .Matches(HmacAlgorithm.Sha256, message, digest, DateTimeOffset.UnixEpoch));
+        }
 
-            Assert.Equal(
-                WebhookSecret.FromBytes(key).CandidatesAsOf(DateTimeOffset.UnixEpoch)[0],
-                WebhookSecret.FromBase64(Convert.ToBase64String(key)).CandidatesAsOf(DateTimeOffset.UnixEpoch)[0]);
+        [Fact]
+        public void MutatingTheCallersKeyArrayDoesNotChangeTheSecret()
+        {
+            // FromBytes used to store the caller's array by reference, so anyone holding it could
+            // silently repoint verification at a different key.
+            byte[] key = { 0xDE, 0xAD, 0xBE, 0xEF };
+            byte[] message = System.Text.Encoding.UTF8.GetBytes(Body);
+            byte[] digest = HmacComputer.Compute(HmacAlgorithm.Sha256, key, message);
+
+            WebhookSecret secret = WebhookSecret.FromBytes(key);
+            Array.Clear(key, 0, key.Length);
+
+            Assert.True(secret.Matches(HmacAlgorithm.Sha256, message, digest, DateTimeOffset.UnixEpoch));
         }
     }
 }
