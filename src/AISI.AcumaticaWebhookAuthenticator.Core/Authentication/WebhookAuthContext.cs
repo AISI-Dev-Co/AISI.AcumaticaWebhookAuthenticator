@@ -17,6 +17,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// buffer, deserialise from the same buffer.
     /// </para>
     /// <para>
+    /// <see cref="Body"/> is <em>not</em> defensively copied, unlike the key material in
+    /// <see cref="Configuration.WebhookSecret"/>. The asymmetry is deliberate: a copy per request
+    /// would double the allocation and memory traffic of every payload the ERP receives, and unlike
+    /// a secret the body is neither confidential to this library nor long-lived. The contract that
+    /// falls out of it is that <strong>the caller must not mutate the array after handing it over,
+    /// and must not share it with anything that might</strong>. Mutating it between verification and
+    /// deserialisation would mean executing a payload that no signature covered.
+    /// </para>
+    /// <para>
     /// This type deliberately has no dependency on Acumatica or ASP.NET. The adapter assembly builds
     /// one of these from the platform's request object, which keeps the whole authentication surface
     /// unit-testable without an ERP instance.
@@ -29,7 +38,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <summary>
         /// Creates a context.
         /// </summary>
-        /// <param name="body">Raw request body bytes, exactly as received.</param>
+        /// <param name="body">
+        /// Raw request body bytes, exactly as received. Retained by reference, not copied — see the
+        /// remarks on this type for the obligation that creates.
+        /// </param>
         /// <param name="headers">
         /// Request headers. Matched case-insensitively regardless of the comparer on the dictionary
         /// passed in. A header with multiple values should be joined with "," by the caller, which is
@@ -68,7 +80,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _headers = caseInsensitive;
         }
 
-        /// <summary>Raw request body bytes, exactly as received.</summary>
+        /// <summary>
+        /// Raw request body bytes, exactly as received. This is the live array the caller supplied,
+        /// not a copy; treat it as read-only.
+        /// </summary>
         public byte[] Body { get; }
 
         /// <summary>HTTP method, or <see langword="null"/> when the platform did not surface one.</summary>

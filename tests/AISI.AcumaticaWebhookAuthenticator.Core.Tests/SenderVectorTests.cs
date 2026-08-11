@@ -35,7 +35,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         private const string StripeV1 =
             "7a0685c65fcda9f1dd585b6eaa74ead6d954e5895ecc08263afbd424c5661b46";
 
-        private static IWebhookSecretProvider Secret(string value) =>
+        private static StaticSecretProvider Secret(string value) =>
             new StaticSecretProvider(WebhookSecret.FromUtf8(value));
 
         [Fact]

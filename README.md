@@ -63,7 +63,27 @@ Stripe's `t=1614556800,v1=5257a8…,v0=6ffbb5…`, and tries every matching elem
 
 Misconfigurations are rejected when the authenticator is constructed, not on the first request.
 Configuring a replay window without a `{timestamp}` in the template throws, because a signature
-that doesn't cover the timestamp makes validating it pointless.
+that doesn't cover the timestamp makes validating it pointless. Undefined enum values are rejected
+the same way.
+
+### Lifetime
+
+`HmacAuthOptions` is a mutable builder and is not thread-safe. `HmacAuthenticator` copies what it
+needs at construction and never reads the options again, so:
+
+- assignments after construction are silently ignored — build a new authenticator instead;
+- one options instance shared across several authenticators freezes each at what it read;
+- mutating on one thread while constructing on another can be observed part-way through, and a
+  half-swapped `Template`/`Timestamp` pair will pass the coherence check because each half is
+  individually valid.
+
+Build options at startup, construct the authenticator, discard the options. The authenticator is
+immutable and safe to share.
+
+`WebhookAuthContext` retains the body array by reference rather than copying it — a copy per
+request would double the memory traffic of every payload, and unlike a secret the body isn't
+confidential. Don't mutate it after handing it over: changing it between verification and
+deserialisation means processing a payload no signature covered.
 
 ## Secret rotation
 

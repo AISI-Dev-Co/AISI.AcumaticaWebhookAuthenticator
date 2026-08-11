@@ -1,5 +1,6 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
+using System;
 using System.Reflection;
 using AISI.AcumaticaWebhookAuthenticator.Signing;
 using Xunit;
@@ -35,7 +36,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void EmptyArrays_AreEqual()
         {
-            Assert.True(FixedTimeComparer.AreEqual(new byte[0], new byte[0]));
+            Assert.True(FixedTimeComparer.AreEqual(Array.Empty<byte>(), Array.Empty<byte>()));
         }
 
         [Fact]

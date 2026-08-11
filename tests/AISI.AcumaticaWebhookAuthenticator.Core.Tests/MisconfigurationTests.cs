@@ -16,7 +16,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
     /// </summary>
     public class MisconfigurationTests
     {
-        private static IWebhookSecretProvider Secret() =>
+        private static StaticSecretProvider Secret() =>
             new StaticSecretProvider(WebhookSecret.FromUtf8("secret"));
 
         [Fact]
@@ -146,6 +146,34 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 RequestBuilder.Post().WithBody("x").WithHeader("X-Hub-Signature-256", "sha256=00").Build());
 
             Assert.Null(report.Misconfiguration);
+        }
+
+        [Fact]
+        public void ReassigningOptionsAfterConstructionHasNoEffect()
+        {
+            // Pins the contract documented on HmacAuthOptions. The snapshot is what makes the
+            // coherence check binding, but it also means an operator "updating" a live authenticator
+            // by assigning to its options changes nothing and is told nothing. Anyone who reads this
+            // test knows to build a new authenticator instead.
+            const string body = "Hello, World!";
+
+            var options = new HmacAuthOptions(Secret(), "X-Signature")
+            {
+                Encoding = SignatureEncoding.Hex,
+            };
+
+            var authenticator = new HmacAuthenticator(options);
+
+            options.Encoding = SignatureEncoding.Base64;
+            options.Algorithm = HmacAlgorithm.Sha512;
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody(body)
+                .WithHeader("X-Signature", Sign(body, "secret"))
+                .Build();
+
+            // Still verifying as hex SHA-256, the configuration that was live at construction.
+            Assert.True(authenticator.Authenticate(request).Succeeded);
         }
 
         [Fact]
