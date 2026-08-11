@@ -37,10 +37,12 @@ own abstraction, translated into `context.Response` mutations by the adapter.
 
 ### `WebhookRequest`
 
-Read from the decompiled assembly, so this is the surface itself rather than what a sample happened
-to touch. `PX.Api.Webhooks.WebhookRequest` is an abstract class with `#nullable disable`:
+Decompiled from `PX.Api.Webhooks.Abstractions, Version=1.0.0.0`. This is the complete public
+surface, not a subset — nothing is elided.
 
 ```csharp
+namespace PX.Api.Webhooks;
+
 public abstract class WebhookRequest
 {
     public virtual string Method { get; }
@@ -49,12 +51,15 @@ public abstract class WebhookRequest
     public virtual long? ContentLength { get; }
     public virtual string ContentType { get; }
     public virtual Stream Body { get; }
+
     public TextReader CreateTextReader(Encoding defaultEncoding = null);
+    protected virtual TextReader CreateTextReaderCore(Encoding encoding);
 }
 ```
 
 `CreateTextReader` parses `charset` out of `ContentType` via `MediaTypeHeaderValue.TryParse` and
-falls back to UTF-8.
+falls back to UTF-8 — confirming that the decoded-text path is charset-dependent, and that reading
+`Body` directly is the only way to obtain the bytes a sender actually signed.
 
 On the response side, `context.Response.StatusCode` is an `int` assigned from
 `Microsoft.AspNetCore.Http.StatusCodes`, `CreateTextWriter()` returns a `TextWriter` for the body,
@@ -80,6 +85,35 @@ Acumatica caps inbound webhook bodies at **1 MB**.
   rather than a necessity, and no `web.config` work is required for a baseline.
 - **`Query` exists** and was not anticipated. A `{query:name}` template token is now feasible for
   senders that sign query parameters; not implemented, no known sender needs it yet.
+- **There is no `Path`.** See below.
+
+### There is no request path
+
+`WebhookRequest` exposes no path member. A sender that signs the request path — not an exotic
+convention — cannot be supported from the platform's request object alone.
+
+`WebhookAuthContext.Path` and the `{path}` token are kept anyway, because the core is host-agnostic
+and a consumer who obtains a path from elsewhere can supply one. Under this platform the adapter
+will pass null, so a template using `{path}` fails every request with `template_path_unavailable`.
+That is a clean, named failure rather than a wrong answer — but it is still a trap if it is only
+discovered in production.
+
+**Adapter obligation:** the adapter knows it cannot supply a path, so it must reject a `{path}`
+template when the handler is constructed rather than let it fail per request. That needs a
+`ReferencesPath` property on `SignedPayloadTemplate`, mirroring the existing `ReferencesTimestamp`.
+It is deliberately not added yet: nothing consumes it until the adapter exists, and unused public
+API is the same defect as unreachable validation.
+
+### Adapter obligations arising from this surface
+
+- **Read `Body` once into a `byte[]`.** It is a bare `Stream` with no documented seekability, so it
+  cannot be relied on for a second pass. The same buffer must feed signature verification and
+  payload deserialisation; that is the whole premise of the library.
+- **Do not trust `ContentLength` as a size gate.** It is `long?` and is absent under chunked
+  transfer encoding. Enforce a cap while reading into a bounded buffer.
+- **Do not hand the consumer the stream.** Give them the buffer.
+- **Flatten nothing.** `Headers` is already `StringValues`; pass the values through to
+  `WebhookAuthContext`'s multi-valued constructor rather than joining them.
 
 ### Registration
 
@@ -123,22 +157,14 @@ implements 2.0. `Signing/FixedTimeComparer.cs` supplies the equivalent.
 
 ## Open
 
-### Is there a `Path` member?
-
-The decompiled listing above was read from a screenshot that cuts off inside `CreateTextReader`, so
-members below it are unconfirmed. Nothing visible exposes the request path.
-
-The `{path}` template token depends on it. `WebhookAuthContext.Path` is nullable and the token fails
-with `template_path_unavailable` rather than a misleading signature mismatch, so a request never
-misreports — but if no `Path` exists, `{path}` should be removed rather than left as a token that
-can only ever fail. `Query` may serve as a partial substitute for senders that sign a path-like
-value.
-
-**Do not remove the token before confirming.** A sender that signs the request path is not exotic.
+Nothing on `WebhookRequest`. The remaining unknown is the `WebhookResponse` surface, which the
+adapter needs in order to set a status code, write a body and add headers. Response headers are
+confirmed settable; the exact member shapes have not been read.
 
 ## How this was established
 
-`PX.Api.Webhooks.Abstractions.dll` was decompiled and the result supplied by the maintainer.
+`PX.Api.Webhooks.Abstractions.dll` (Version 1.0.0.0) was decompiled and the result supplied by the
+maintainer.
 
 It could not be decompiled here. This repository is built in a cloud container with no Acumatica
 installation, so there is no site `Bin` to read from; Acumatica publishes no `PX.*` packages to

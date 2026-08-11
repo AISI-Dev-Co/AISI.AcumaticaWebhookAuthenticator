@@ -57,6 +57,10 @@ var options = new HmacAuthOptions(secretProvider, signatureHeader: "X-Signature"
 Template tokens: `{body}`, `{timestamp}`, `{method}`, `{path}`, `{header:Name}`. Braces are escaped
 `{{` and `}}`.
 
+`{path}` has no source under Acumatica — `PX.Api.Webhooks.WebhookRequest` exposes no request path —
+so it resolves only if you construct the context yourself with a path obtained elsewhere. A sender
+that signs the request path is not supportable from the platform's request object alone.
+
 `SignatureExtraction.KeyValueElement("v1")` pulls the signature out of a compound header such as
 Stripe's `t=1614556800,v1=5257a8…,v0=6ffbb5…`, and tries every matching element — Stripe emits one
 `v1` per active endpoint secret.
