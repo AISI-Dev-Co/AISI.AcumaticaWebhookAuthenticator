@@ -99,7 +99,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal("a,b", folded);
 
             Assert.True(request.TryGetHeaderValues("X-Trace", out IReadOnlyList<string> values));
-            Assert.Equal(new[] { "a", "b" }, values);
+            Assert.Equal(2, values.Count);
+            Assert.Equal("a", values[0]);
+            Assert.Equal("b", values[1]);
         }
 
         [Fact]
