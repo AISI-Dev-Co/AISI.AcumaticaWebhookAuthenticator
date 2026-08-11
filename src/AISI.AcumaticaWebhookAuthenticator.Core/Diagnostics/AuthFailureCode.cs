@@ -53,6 +53,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         public const string SecretUnavailable = "secret_unavailable";
 
         /// <summary>
+        /// The configuration itself is incoherent and no request could verify against it. Only
+        /// <see cref="WebhookSignatureTester"/> reports this; on the request path the same condition
+        /// is an exception thrown when the authenticator is constructed.
+        /// </summary>
+        public const string Misconfigured = "misconfigured";
+
+        /// <summary>
         /// A failure with no more specific code. Reported by a default-constructed
         /// <see cref="Authentication.AuthResult"/>, which no code path should produce.
         /// </summary>

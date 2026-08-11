@@ -57,5 +57,53 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// what turns an <c>HMAC</c> scheme into an <c>HMACTS</c> one.
         /// </summary>
         public TimestampValidation? Timestamp { get; set; }
+
+        /// <summary>
+        /// Describes what is wrong with this configuration, or <see langword="null"/> when it is
+        /// coherent.
+        /// </summary>
+        /// <returns>A message suitable for a developer, or <see langword="null"/>.</returns>
+        /// <remarks>
+        /// Exposed separately from the constructor of
+        /// <see cref="Authentication.HmacAuthenticator"/> so that
+        /// <see cref="Diagnostics.WebhookSignatureTester"/> can report a misconfiguration instead of
+        /// throwing on it. A diagnostic tool that crashes on the most common class of problem it
+        /// exists to explain is not much of a diagnostic tool.
+        /// </remarks>
+        public string? DescribeMisconfiguration()
+        {
+            if (Template is null)
+            {
+                return "No signed-payload template is configured.";
+            }
+
+            if (SecretProvider is null)
+            {
+                return "No secret provider is configured.";
+            }
+
+            if (Extraction is null)
+            {
+                return "No signature extraction mode is configured.";
+            }
+
+            if (Timestamp is object && !Template.ReferencesTimestamp)
+            {
+                return "A replay window is configured but the signed-payload template '" +
+                    Template.Pattern +
+                    "' does not include a {timestamp} token, so the signature would not cover the " +
+                    "timestamp being validated. Add {timestamp} to the template, or drop the window.";
+            }
+
+            if (Timestamp is null && Template.ReferencesTimestamp)
+            {
+                return "The signed-payload template '" +
+                    Template.Pattern +
+                    "' includes a {timestamp} token but no timestamp source is configured, so no " +
+                    "request could ever be verified. Set HmacAuthOptions.Timestamp.";
+            }
+
+            return null;
+        }
     }
 }

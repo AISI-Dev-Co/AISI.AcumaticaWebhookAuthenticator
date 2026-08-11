@@ -147,8 +147,8 @@ Core is complete and tested. The Acumatica adapter is blocked on one unknown —
 dotnet test
 ```
 
-75 tests, no Acumatica instance required — the core deliberately references nothing from Acumatica
-or ASP.NET.
+No Acumatica instance required — the core deliberately references nothing from Acumatica or
+ASP.NET.
 
 New signature schemes need a known-good and a known-bad vector in `SenderVectorTests`. Prefer a
 vector published by the sender over one this library computed for itself; the GitHub pair is taken

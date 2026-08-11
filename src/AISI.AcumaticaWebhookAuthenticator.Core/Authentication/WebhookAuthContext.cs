@@ -24,7 +24,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class WebhookAuthContext
     {
-        private readonly IReadOnlyDictionary<string, string> _headers;
+        private readonly Dictionary<string, string> _headers;
 
         /// <summary>
         /// Creates a context.

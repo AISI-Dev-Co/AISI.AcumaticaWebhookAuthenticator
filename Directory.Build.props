@@ -11,6 +11,13 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      Without this the dotnet_diagnostic entries in .editorconfig are inert - the rules they
+      configure are never run. Configuration that looks like it is enforcing something and is not
+      is worse than no configuration at all.
+    -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-minimum</AnalysisLevel>
   </PropertyGroup>
 
 </Project>

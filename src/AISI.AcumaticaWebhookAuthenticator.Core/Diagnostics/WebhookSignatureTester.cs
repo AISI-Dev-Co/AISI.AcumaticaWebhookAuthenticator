@@ -45,6 +45,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 throw new ArgumentNullException(nameof(context));
             }
 
+            // Reported, not thrown. Constructing the authenticator would throw here, and a tool whose
+            // job is explaining why verification failed should not crash on the most common reason.
+            string? problem = options.DescribeMisconfiguration();
+            if (problem is object)
+            {
+                return SignatureTestReport.Misconfigured(problem);
+            }
+
             context.TryGetHeader(options.SignatureHeader, out string headerValue);
             IReadOnlyList<string> provided = options.Extraction.Extract(headerValue);
             string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValue);

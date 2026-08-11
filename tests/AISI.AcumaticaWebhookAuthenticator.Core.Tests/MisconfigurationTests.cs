@@ -99,6 +99,56 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
+        public void MutatingTheOptionsAfterConstructionCannotDefeatTheCoherenceCheck()
+        {
+            // HmacAuthOptions is a mutable initializer bag. Reading it per request would let this
+            // assignment walk straight past the constructor's check and reinstate the replay window
+            // over a timestamp nothing signs.
+            var options = WebhookAuthPresets.GitHub(Secret());
+            var authenticator = new HmacAuthenticator(options);
+
+            options.Timestamp = TimestampValidation.FromHeader("X-Timestamp", TimeSpan.FromMinutes(5));
+            options.SignaturePrefix = "totally-different=";
+
+            Assert.Equal("HMAC", authenticator.Code);
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody("Hello, World!")
+                .WithHeader("X-Hub-Signature-256", "sha256=" + Sign("Hello, World!", "secret"))
+                .Build();
+
+            Assert.True(authenticator.Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void TheSignatureTesterReportsAMisconfigurationRatherThanThrowing()
+        {
+            var options = new HmacAuthOptions(Secret(), "X-Signature")
+            {
+                Template = SignedPayloadTemplate.Body,
+                Timestamp = TimestampValidation.FromHeader("X-Timestamp", TimeSpan.FromMinutes(5)),
+            };
+
+            SignatureTestReport report = WebhookSignatureTester.Test(
+                options,
+                RequestBuilder.Post().WithBody("x").Build());
+
+            Assert.False(report.Matched);
+            Assert.Equal(AuthFailureCode.Misconfigured, report.FailureCode);
+            Assert.Contains("{timestamp}", report.Misconfiguration!, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void ACoherentConfigurationReportsNoMisconfiguration()
+        {
+            SignatureTestReport report = WebhookSignatureTester.Test(
+                WebhookAuthPresets.GitHub(Secret()),
+                RequestBuilder.Post().WithBody("x").WithHeader("X-Hub-Signature-256", "sha256=00").Build());
+
+            Assert.Null(report.Misconfiguration);
+        }
+
+        [Fact]
         public void ADefaultAuthResultReportsAFailureRatherThanANullCode()
         {
             AuthResult result = default;

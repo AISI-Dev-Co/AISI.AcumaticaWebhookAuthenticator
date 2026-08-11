@@ -149,21 +149,56 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <param name="asOf">The instant to evaluate the rotation window against.</param>
         /// <returns><see langword="true"/> when the signature is valid.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
-        public bool Matches(HmacAlgorithm algorithm, byte[] message, byte[]? providedDigest, DateTimeOffset asOf)
+        public bool Matches(HmacAlgorithm algorithm, byte[] message, byte[]? providedDigest, DateTimeOffset asOf) =>
+            MatchesAny(algorithm, message, new[] { providedDigest }, asOf);
+
+        /// <summary>
+        /// Whether any of <paramref name="providedDigests"/> is a valid signature of
+        /// <paramref name="message"/> under any secret live at <paramref name="asOf"/>.
+        /// </summary>
+        /// <param name="algorithm">Hash algorithm.</param>
+        /// <param name="message">The exact bytes the sender signed.</param>
+        /// <param name="providedDigests">Every digest offered on the request.</param>
+        /// <param name="asOf">The instant to evaluate the rotation window against.</param>
+        /// <returns><see langword="true"/> when any pairing is valid.</returns>
+        /// <remarks>
+        /// Takes the whole candidate set at once so each key is hashed exactly once. Verifying one
+        /// candidate at a time recomputed the same digest per candidate — four HMACs for a Stripe
+        /// request carrying two <c>v1</c> elements during a rotation overlap — and made the work
+        /// done visible in the candidate count rather than fixed by configuration.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="message"/> or <paramref name="providedDigests"/> is null.
+        /// </exception>
+        public bool MatchesAny(
+            HmacAlgorithm algorithm,
+            byte[] message,
+            IReadOnlyList<byte[]?> providedDigests,
+            DateTimeOffset asOf)
         {
             if (message is null)
             {
                 throw new ArgumentNullException(nameof(message));
             }
 
+            if (providedDigests is null)
+            {
+                throw new ArgumentNullException(nameof(providedDigests));
+            }
+
             bool matched = false;
 
-            // Deliberately not short-circuited. Returning on the first hit would make a request
-            // signed with the current secret measurably faster than one signed with the rotating
-            // secret, which tells an observer which is which.
+            // Deliberately not short-circuited, in either loop. Returning on the first hit would
+            // make a request signed with the current secret measurably faster than one signed with
+            // the rotating secret, which tells an observer which is which.
             foreach (byte[] key in LiveKeys(asOf))
             {
-                matched |= FixedTimeComparer.AreEqual(HmacComputer.Compute(algorithm, key, message), providedDigest);
+                byte[] expected = HmacComputer.Compute(algorithm, key, message);
+
+                foreach (byte[]? provided in providedDigests)
+                {
+                    matched |= FixedTimeComparer.AreEqual(expected, provided);
+                }
             }
 
             return matched;

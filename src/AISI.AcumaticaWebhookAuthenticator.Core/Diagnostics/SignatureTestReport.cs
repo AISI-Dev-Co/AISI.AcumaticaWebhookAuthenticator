@@ -1,5 +1,6 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
+using System;
 using System.Collections.Generic;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
@@ -31,8 +32,32 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
             ProvidedSignatures = providedSignatures;
         }
 
+        /// <summary>
+        /// Builds a report for a configuration that could never verify anything.
+        /// </summary>
+        /// <param name="problem">What is wrong, from <see cref="Configuration.HmacAuthOptions.DescribeMisconfiguration"/>.</param>
+        /// <returns>The report.</returns>
+        internal static SignatureTestReport Misconfigured(string problem) =>
+            new SignatureTestReport(
+                false,
+                AuthFailureCode.Misconfigured,
+                string.Empty,
+                string.Empty,
+                null,
+                Array.Empty<string>(),
+                Array.Empty<string>())
+            {
+                Misconfiguration = problem,
+            };
+
         /// <summary>Whether the request authenticated.</summary>
         public bool Matched { get; }
+
+        /// <summary>
+        /// What is wrong with the configuration itself, when nothing about the request could have
+        /// made it verify. <see langword="null"/> when the configuration is coherent.
+        /// </summary>
+        public string? Misconfiguration { get; private set; }
 
         /// <summary>An <see cref="AuthFailureCode"/> value when it did not, otherwise empty.</summary>
         public string FailureCode { get; }
