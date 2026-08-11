@@ -114,6 +114,11 @@ API is the same defect as unreachable validation.
 - **Do not hand the consumer the stream.** Give them the buffer.
 - **Flatten nothing.** `Headers` is already `StringValues`; pass the values through to
   `WebhookAuthContext`'s multi-valued constructor rather than joining them.
+- **Set the status code and every response header before writing the body.** `CreateTextWriter()`
+  returns a writer over the response stream, and on any conventional implementation the first write
+  flushes the response head. A header added afterwards is silently dropped — no exception, no
+  warning, just a missing header nobody notices until a sender misbehaves. This holds whatever shape
+  the response's header collection turns out to be.
 
 ### Registration
 
