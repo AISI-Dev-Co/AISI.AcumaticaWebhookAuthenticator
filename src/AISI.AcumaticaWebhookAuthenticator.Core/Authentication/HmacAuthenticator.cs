@@ -82,18 +82,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentNullException(nameof(context));
             }
 
-            if (!context.TryGetHeader(_signatureHeader, out string headerValue))
+            if (!context.TryGetHeaderValues(_signatureHeader, out IReadOnlyList<string> headerValues))
             {
                 return AuthResult.Fail(AuthFailureCode.SignatureHeaderMissing);
             }
 
-            IReadOnlyList<string> candidates = _extraction.Extract(headerValue);
+            IReadOnlyList<string> candidates = _extraction.Extract(headerValues);
             if (candidates.Count == 0)
             {
                 return AuthResult.Fail(AuthFailureCode.SignatureElementMissing);
             }
 
-            string? timestampRaw = _timestamp?.ReadRaw(context, headerValue);
+            string? timestampRaw = _timestamp?.ReadRaw(context, headerValues);
 
             TemplateResolution resolution = _template.Resolve(context, timestampRaw);
             if (!resolution.Success)

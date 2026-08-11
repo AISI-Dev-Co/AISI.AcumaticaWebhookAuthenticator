@@ -44,6 +44,64 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.False(Authenticate(headerValue).Succeeded);
         }
 
+        public static IEnumerable<object[]> RepeatedHeadersCarryingTheValidSignature()
+        {
+            yield return new object[] { new[] { Signature } };
+            yield return new object[] { new[] { Signature, Decoy } };
+            yield return new object[] { new[] { Decoy, Signature } };
+            yield return new object[] { new[] { Decoy, Signature, Decoy } };
+        }
+
+        [Theory]
+        [MemberData(nameof(RepeatedHeadersCarryingTheValidSignature))]
+        public void ARepeatedHeaderIsExtractedFromEachValueIndependently(string[] headerValues)
+        {
+            // PX.Api.Webhooks.WebhookRequest.Headers is IReadOnlyDictionary<string, StringValues>, so
+            // a repeated header reaches the adapter as distinct values. The context carries them
+            // through rather than making the adapter flatten and this library re-split.
+            var options = WebhookAuthPresets.GitHub(
+                new StaticSecretProvider(WebhookSecret.FromUtf8(Secret)));
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody(Body)
+                .WithRepeatedHeader("X-Hub-Signature-256", headerValues)
+                .Build();
+
+            Assert.True(new HmacAuthenticator(options).Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void ARepeatedHeaderWithNoValidValueIsRejected()
+        {
+            var options = WebhookAuthPresets.GitHub(
+                new StaticSecretProvider(WebhookSecret.FromUtf8(Secret)));
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody(Body)
+                .WithRepeatedHeader("X-Hub-Signature-256", Decoy, Decoy)
+                .Build();
+
+            Assert.False(new HmacAuthenticator(options).Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void TryGetHeaderFoldsARepeatedHeaderForTemplateUse()
+        {
+            // The {header:Name} token needs one string, and HTTP field-value folding is how a
+            // repeated header becomes one. Signature extraction deliberately does not go through
+            // this path.
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody(Body)
+                .WithRepeatedHeader("X-Trace", "a", "b")
+                .Build();
+
+            Assert.True(request.TryGetHeader("X-Trace", out string folded));
+            Assert.Equal("a,b", folded);
+
+            Assert.True(request.TryGetHeaderValues("X-Trace", out IReadOnlyList<string> values));
+            Assert.Equal(new[] { "a", "b" }, values);
+        }
+
         [Fact]
         public void SplittingDoesNotCorruptASingleSignature()
         {

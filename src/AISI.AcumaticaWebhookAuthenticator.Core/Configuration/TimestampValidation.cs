@@ -105,12 +105,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// Reads the raw timestamp text for this configuration.
         /// </summary>
         /// <param name="context">The request.</param>
-        /// <param name="signatureHeaderValue">
-        /// The signature header value, needed when the timestamp lives inside it.
+        /// <param name="signatureHeaderValues">
+        /// The signature header's values, needed when the timestamp lives inside it.
         /// </param>
         /// <returns>The raw text, or <see langword="null"/> when absent.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
-        public string? ReadRaw(WebhookAuthContext context, string? signatureHeaderValue)
+        public string? ReadRaw(WebhookAuthContext context, IReadOnlyList<string>? signatureHeaderValues)
         {
             if (context is null)
             {
@@ -122,7 +122,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 return context.TryGetHeader(_headerName, out string value) ? value : null;
             }
 
-            IReadOnlyList<string> elements = _signatureHeaderElement!.Extract(signatureHeaderValue);
+            IReadOnlyList<string> elements = _signatureHeaderElement!.Extract(signatureHeaderValues);
             return elements.Count > 0 ? elements[0] : null;
         }
 

@@ -60,7 +60,38 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
-        /// Pulls candidate signature values out of a header value.
+        /// Pulls candidate signature values out of every value of a repeated header.
+        /// </summary>
+        /// <param name="headerValues">The raw header values, in the order they arrived.</param>
+        /// <returns>Zero or more candidate signatures.</returns>
+        /// <remarks>
+        /// The platform exposes headers as <c>StringValues</c>, so a repeated signature header
+        /// arrives as distinct values rather than one folded string. Each is extracted from
+        /// independently.
+        /// </remarks>
+        public IReadOnlyList<string> Extract(IReadOnlyList<string>? headerValues)
+        {
+            if (headerValues is null || headerValues.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            if (headerValues.Count == 1)
+            {
+                return Extract(headerValues[0]);
+            }
+
+            var all = new List<string>();
+            foreach (string headerValue in headerValues)
+            {
+                all.AddRange(Extract(headerValue));
+            }
+
+            return all;
+        }
+
+        /// <summary>
+        /// Pulls candidate signature values out of a single header value.
         /// </summary>
         /// <param name="headerValue">The raw header value.</param>
         /// <returns>Zero or more candidate signatures, in the order they appeared.</returns>

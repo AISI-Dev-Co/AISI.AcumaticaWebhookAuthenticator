@@ -12,7 +12,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
     /// </summary>
     internal sealed class RequestBuilder
     {
-        private readonly Dictionary<string, string> _headers = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, IReadOnlyList<string>> _headers = new(StringComparer.OrdinalIgnoreCase);
         private byte[] _body = Array.Empty<byte>();
         private string? _method = "POST";
         private string? _path = "/api/webhooks/company/inbound";
@@ -34,7 +34,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
         public RequestBuilder WithHeader(string name, string value)
         {
-            _headers[name] = value;
+            _headers[name] = new[] { value };
+            return this;
+        }
+
+        /// <summary>
+        /// Adds a header that arrived more than once, as the platform's StringValues would carry it.
+        /// </summary>
+        public RequestBuilder WithRepeatedHeader(string name, params string[] values)
+        {
+            _headers[name] = values;
             return this;
         }
 

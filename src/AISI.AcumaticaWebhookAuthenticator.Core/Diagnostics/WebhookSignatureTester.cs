@@ -53,9 +53,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 return SignatureTestReport.Misconfigured(problem);
             }
 
-            context.TryGetHeader(options.SignatureHeader, out string headerValue);
-            IReadOnlyList<string> provided = options.Extraction.Extract(headerValue);
-            string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValue);
+            context.TryGetHeaderValues(options.SignatureHeader, out IReadOnlyList<string> headerValues);
+            IReadOnlyList<string> provided = options.Extraction.Extract(headerValues);
+            string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValues);
 
             TemplateResolution resolution = options.Template.Resolve(context, timestampRaw, capturePreview: true);
             AuthResult outcome = new HmacAuthenticator(options).Authenticate(context);

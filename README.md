@@ -140,7 +140,8 @@ Targets `netstandard2.0`, so one assembly serves the net48 runtime Acumatica 202
 
 **The signed payload is bytes.** `SignedPayloadTemplate` resolves to `byte[]` and splices the raw
 body in verbatim. Composing it as a string would round-trip the body through a decode/encode that
-is lossy for a BOM, a non-UTF-8 charset, or an invalid byte sequence.
+is lossy for a BOM, a non-UTF-8 charset, or an invalid byte sequence. `WebhookRequest.Body` is a
+`Stream`, so the exact signed bytes are available — `CreateTextReader()` is not the only way in.
 
 **Failures are indistinguishable.** One 401, one generic body. `AuthFailureCode` goes to the trace,
 never to the sender — a caller who can tell "malformed" from "wrong" has an oracle.
@@ -150,9 +151,8 @@ handling.
 
 ## Status
 
-Core is complete and tested. The Acumatica adapter is blocked on one unknown — whether
-`WebhookContext.Request` exposes raw bytes or only `CreateTextReader()`. See
-[docs/framework-notes.md](docs/framework-notes.md).
+Core is complete and tested. The `IWebhookHandler` surface is verified against the decompiled
+assembly — see [docs/framework-notes.md](docs/framework-notes.md) — and the adapter is unblocked.
 
 - [x] HMAC / HMAC+timestamp, templates, rotation, presets
 - [ ] `IWebhookHandler` base class

@@ -17,6 +17,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// buffer, deserialise from the same buffer.
     /// </para>
     /// <para>
+    /// Headers are multi-valued, mirroring the <c>StringValues</c> that
+    /// <c>PX.Api.Webhooks.WebhookRequest.Headers</c> exposes. A repeated header therefore arrives
+    /// intact rather than folded into one string and split apart again downstream.
+    /// </para>
+    /// <para>
     /// <see cref="Body"/> is <em>not</em> defensively copied, unlike the key material in
     /// <see cref="Configuration.WebhookSecret"/>. The asymmetry is deliberate: a copy per request
     /// would double the allocation and memory traffic of every payload the ERP receives, and unlike
@@ -33,10 +38,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class WebhookAuthContext
     {
-        private readonly Dictionary<string, string> _headers;
+        private static readonly IReadOnlyList<string> NoValues = Array.Empty<string>();
+
+        private readonly Dictionary<string, IReadOnlyList<string>> _headers;
 
         /// <summary>
-        /// Creates a context.
+        /// Creates a context from multi-valued headers. This is the shape the platform provides and
+        /// the one an adapter should use.
         /// </summary>
         /// <param name="body">
         /// Raw request body bytes, exactly as received. Retained by reference, not copied — see the
@@ -44,11 +52,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// </param>
         /// <param name="headers">
         /// Request headers. Matched case-insensitively regardless of the comparer on the dictionary
-        /// passed in. A header with multiple values should be joined with "," by the caller, which is
-        /// what HTTP field-value folding specifies.
+        /// passed in.
         /// </param>
         /// <param name="method">HTTP method, e.g. "POST". Optional; only needed by templates using <c>{method}</c>.</param>
-        /// <param name="path">Request path, e.g. "/api/webhooks/…". Optional; only needed by templates using <c>{path}</c>.</param>
+        /// <param name="path">Request path. Optional; only needed by templates using <c>{path}</c>.</param>
         /// <param name="receivedOn">
         /// When the request arrived. Supplied rather than read from the clock so that replay-window
         /// behaviour is deterministic under test.
@@ -56,7 +63,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="headers"/> is null.</exception>
         public WebhookAuthContext(
             byte[] body,
-            IReadOnlyDictionary<string, string> headers,
+            IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
             string? method,
             string? path,
             DateTimeOffset receivedOn)
@@ -71,13 +78,31 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             Path = path;
             ReceivedOn = receivedOn;
 
-            var caseInsensitive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (KeyValuePair<string, string> header in headers)
+            _headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, IReadOnlyList<string>> header in headers)
             {
-                caseInsensitive[header.Key] = header.Value;
+                _headers[header.Key] = header.Value ?? NoValues;
             }
+        }
 
-            _headers = caseInsensitive;
+        /// <summary>
+        /// Creates a context from single-valued headers, for callers that have already flattened
+        /// them.
+        /// </summary>
+        /// <param name="body">Raw request body bytes, exactly as received.</param>
+        /// <param name="headers">Request headers, one value each.</param>
+        /// <param name="method">HTTP method. Optional.</param>
+        /// <param name="path">Request path. Optional.</param>
+        /// <param name="receivedOn">When the request arrived.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="headers"/> is null.</exception>
+        public WebhookAuthContext(
+            byte[] body,
+            IReadOnlyDictionary<string, string> headers,
+            string? method,
+            string? path,
+            DateTimeOffset receivedOn)
+            : this(body, Widen(headers), method, path, receivedOn)
+        {
         }
 
         /// <summary>
@@ -96,27 +121,65 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         public DateTimeOffset ReceivedOn { get; }
 
         /// <summary>Request headers, matched case-insensitively.</summary>
-        public IReadOnlyDictionary<string, string> Headers => _headers;
+        public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers => _headers;
 
         /// <summary>
-        /// Looks up a header by name, case-insensitively.
+        /// Looks up every value of a header, case-insensitively.
+        /// </summary>
+        /// <param name="name">Header name.</param>
+        /// <param name="values">The values when present, otherwise empty. Never null.</param>
+        /// <returns><see langword="true"/> when the header is present with at least one value.</returns>
+        public bool TryGetHeaderValues(string name, out IReadOnlyList<string> values)
+        {
+            if (name is object && _headers.TryGetValue(name, out IReadOnlyList<string> found) && found.Count > 0)
+            {
+                values = found;
+                return true;
+            }
+
+            values = NoValues;
+            return false;
+        }
+
+        /// <summary>
+        /// Looks up a header as a single string, case-insensitively.
         /// </summary>
         /// <param name="name">Header name.</param>
         /// <param name="value">
         /// The header value when present, otherwise <see cref="string.Empty"/>. Never null, so a
-        /// caller that ignores the return value cannot end up passing null onward.
+        /// caller that ignores the return value cannot end up passing null onward. A repeated header
+        /// is joined with "," as HTTP field-value folding specifies — which is what the
+        /// <c>{header:Name}</c> template token needs, and why signature extraction uses
+        /// <see cref="TryGetHeaderValues"/> instead.
         /// </param>
         /// <returns><see langword="true"/> when the header is present.</returns>
         public bool TryGetHeader(string name, out string value)
         {
-            if (name is object && _headers.TryGetValue(name, out string found))
+            if (!TryGetHeaderValues(name, out IReadOnlyList<string> values))
             {
-                value = found;
-                return true;
+                value = string.Empty;
+                return false;
             }
 
-            value = string.Empty;
-            return false;
+            value = values.Count == 1 ? values[0] : string.Join(",", values);
+            return true;
+        }
+
+        private static Dictionary<string, IReadOnlyList<string>> Widen(
+            IReadOnlyDictionary<string, string> headers)
+        {
+            if (headers is null)
+            {
+                throw new ArgumentNullException(nameof(headers));
+            }
+
+            var widened = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                widened[header.Key] = new[] { header.Value };
+            }
+
+            return widened;
         }
     }
 }

@@ -35,14 +35,51 @@ version drift to abstract over, and no version adapter is needed.**
 through `context.Response` as a side effect. Any result type this library exposes is therefore its
 own abstraction, translated into `context.Response` mutations by the adapter.
 
-### Members exercised by the official sample
+### `WebhookRequest`
 
-| Member | Observed use |
-|---|---|
-| `context.Request.Headers.TryGetValue(name, out var value)` | ASP.NET Core `IHeaderDictionary`; the sample uses `Microsoft.Net.Http.Headers.HeaderNames` |
-| `context.Request.CreateTextReader()` | Returns a `TextReader`, wrapped in a `JsonTextReader` |
-| `context.Response.StatusCode` | `int`, assigned from `Microsoft.AspNetCore.Http.StatusCodes` |
-| `context.Response.CreateTextWriter()` | Returns a `TextWriter` for the response body |
+Read from the decompiled assembly, so this is the surface itself rather than what a sample happened
+to touch. `PX.Api.Webhooks.WebhookRequest` is an abstract class with `#nullable disable`:
+
+```csharp
+public abstract class WebhookRequest
+{
+    public virtual string Method { get; }
+    public virtual IReadOnlyDictionary<string, StringValues> Query { get; }
+    public virtual IReadOnlyDictionary<string, StringValues> Headers { get; }
+    public virtual long? ContentLength { get; }
+    public virtual string ContentType { get; }
+    public virtual Stream Body { get; }
+    public TextReader CreateTextReader(Encoding defaultEncoding = null);
+}
+```
+
+`CreateTextReader` parses `charset` out of `ContentType` via `MediaTypeHeaderValue.TryParse` and
+falls back to UTF-8.
+
+On the response side, `context.Response.StatusCode` is an `int` assigned from
+`Microsoft.AspNetCore.Http.StatusCodes`, `CreateTextWriter()` returns a `TextWriter` for the body,
+and **response headers can be set**.
+
+Acumatica caps inbound webhook bodies at **1 MB**.
+
+### What that settles
+
+- **`Body` is a `Stream`.** Raw bytes are available, so HMAC verification runs against exactly what
+  the sender signed. The `CreateTextReader` round trip — and every BOM, charset and invalid-sequence
+  failure it would have caused — is avoidable entirely. `SignedPayloadTemplate` resolving to
+  `byte[]` is now straightforwardly correct rather than defensive.
+- **`Headers` is multi-valued.** `WebhookAuthContext` carries `IReadOnlyList<string>` per header to
+  match, so a repeated signature header is extracted from value by value instead of being folded
+  into one string by the adapter and split apart again here.
+- **`Method` exists**, so the `{method}` template token is supported.
+- **`ContentType` and `ContentLength` exist**, which the adapter will want for content-type guards
+  and for rejecting oversized bodies before reading them.
+- **Response headers are settable**, so `WWW-Authenticate` on a 401 is available to the `BASIC`
+  scheme when it lands.
+- **The 1 MB cap is enforced by the platform**, so a per-endpoint body-size limit is a refinement
+  rather than a necessity, and no `web.config` work is required for a baseline.
+- **`Query` exists** and was not anticipated. A `{query:name}` template token is now feasible for
+  senders that sign query parameters; not implemented, no known sender needs it yet.
 
 ### Registration
 
@@ -86,47 +123,31 @@ implements 2.0. `Signing/FixedTimeComparer.cs` supplies the equivalent.
 
 ## Open
 
-These are unresolved. Each needs ten minutes with ILSpy or dotPeek against
-`PX.Api.Webhooks.Abstractions.dll` on a 2025 R2 site. They gate the adapter assembly, not the core.
+### Is there a `Path` member?
 
-### 1. Does `WebhookContext.Request` expose raw bytes? — blocking
+The decompiled listing above was read from a screenshot that cuts off inside `CreateTextReader`, so
+members below it are unconfirmed. Nothing visible exposes the request path.
 
-`CreateTextReader()` hands back **already-decoded text**. HMAC verification needs the exact bytes
-the sender signed, and re-encoding decoded text is not a lossless round trip for a body carrying a
-BOM, a non-UTF-8 charset declared in `Content-Type`, or an invalid byte sequence that decoding
-replaces with U+FFFD.
+The `{path}` template token depends on it. `WebhookAuthContext.Path` is nullable and the token fails
+with `template_path_unavailable` rather than a misleading signature mismatch, so a request never
+misreports — but if no `Path` exists, `{path}` should be removed rather than left as a token that
+can only ever fail. `Query` may serve as a partial substitute for senders that sign a path-like
+value.
 
-- If a `Stream` or `byte[]` accessor exists, use it and the problem disappears.
-- If not, try reflecting over an underlying `HttpRequest` if the context wraps one.
-- Failing both, UTF-8 re-encoding is correct for the overwhelming majority of senders and must be
-  documented as a limitation. `WebhookSignatureTester` then stops being a convenience and becomes
-  the primary support tool.
+**Do not remove the token before confirming.** A sender that signs the request path is not exotic.
 
-The core is already written to survive this: `SignedPayloadTemplate` resolves to `byte[]` and
-splices the body in verbatim, so no part of the signing path forces the body through a string.
+## How this was established
 
-### 2. Are `Method` and `Path` surfaced?
+`PX.Api.Webhooks.Abstractions.dll` was decompiled and the result supplied by the maintainer.
 
-The `{method}` and `{path}` template tokens depend on them. `WebhookAuthContext` accepts null for
-both and the tokens fail with their own diagnostic codes rather than a misleading signature
-mismatch, so the failure is graceful either way — but coverage of senders that sign the method or
-path depends on the answer.
+It could not be decompiled here. This repository is built in a cloud container with no Acumatica
+installation, so there is no site `Bin` to read from; Acumatica publishes no `PX.*` packages to
+nuget.org (`px.api.webhooks.abstractions`, `px.data`, `px.common` and `px.api` all return
+`BlobNotFound`); and `help.acumatica.com`, `community.acumatica.com` and `www.acumatica.com` are
+blocked by the container's egress policy. Decompilation needs the binary, and there was no route to
+one.
 
-### 3. Can response headers be set?
-
-Only `BASIC` needs this, to return `WWW-Authenticate: Basic realm="…"` alongside a 401. Without it
-Basic still functions but is not strictly conformant. Nothing observed in the sample exposes a
-response header collection.
-
-### 4. Is the request body pre-buffered?
-
-Decides whether a body-size cap can be enforced before a full read, or whether it has to live in
-`web.config` (`maxAllowedContentLength` / `maxRequestLength`) instead.
-
-## Egress note
-
-Acumatica's own documentation could not be consulted while writing this: `help.acumatica.com`,
-`community.acumatica.com`, `www.acumatica.com` and the usual third-party blogs are all blocked by
-this environment's egress policy. Everything above comes from the GitHub examples repository. If
-the documentation becomes reachable, the Open section is worth a second pass before the adapter is
-built.
+The lesson for the next unknown is to ask for the artefact directly rather than record the question
+and work around it. Everything in the Verified section above that predates this note came from the
+public examples repository, which was the best available substitute and was materially less
+complete.
