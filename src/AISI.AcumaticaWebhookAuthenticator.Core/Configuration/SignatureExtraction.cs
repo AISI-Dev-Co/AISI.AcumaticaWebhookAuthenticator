@@ -73,7 +73,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             if (_elementKey is null)
             {
-                return new[] { headerValue!.Trim() };
+                // Split even in whole-value mode. WebhookAuthContext asks callers to fold a repeated
+                // header into one comma-separated value, per HTTP field-value semantics, and handing
+                // that folded string straight to a hex or base64 decoder fails. Neither alphabet
+                // contains a comma, so splitting cannot corrupt a single well-formed signature.
+                var whole = new List<string>();
+
+                foreach (string part in headerValue!.Split(','))
+                {
+                    string trimmed = part.Trim();
+                    if (trimmed.Length > 0)
+                    {
+                        whole.Add(trimmed);
+                    }
+                }
+
+                return whole;
             }
 
             var matches = new List<string>();

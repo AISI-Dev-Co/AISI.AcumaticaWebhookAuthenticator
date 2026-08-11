@@ -21,8 +21,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
             string signedPayloadPreview,
             string? timestampRaw,
             IReadOnlyList<string> expectedSignatures,
-            IReadOnlyList<string> providedSignatures)
+            IReadOnlyList<string> providedSignatures,
+            string? misconfiguration = null)
         {
+            Misconfiguration = misconfiguration;
             Matched = matched;
             FailureCode = failureCode;
             TemplatePattern = templatePattern;
@@ -45,10 +47,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 string.Empty,
                 null,
                 Array.Empty<string>(),
-                Array.Empty<string>())
-            {
-                Misconfiguration = problem,
-            };
+                Array.Empty<string>(),
+                problem);
 
         /// <summary>Whether the request authenticated.</summary>
         public bool Matched { get; }
@@ -57,7 +57,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         /// What is wrong with the configuration itself, when nothing about the request could have
         /// made it verify. <see langword="null"/> when the configuration is coherent.
         /// </summary>
-        public string? Misconfiguration { get; private set; }
+        public string? Misconfiguration { get; }
 
         /// <summary>An <see cref="AuthFailureCode"/> value when it did not, otherwise empty.</summary>
         public string FailureCode { get; }

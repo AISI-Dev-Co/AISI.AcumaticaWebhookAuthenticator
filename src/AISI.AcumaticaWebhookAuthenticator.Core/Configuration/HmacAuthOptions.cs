@@ -77,14 +77,23 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 return "No signed-payload template is configured.";
             }
 
-            if (SecretProvider is null)
-            {
-                return "No secret provider is configured.";
-            }
-
             if (Extraction is null)
             {
                 return "No signature extraction mode is configured.";
+            }
+
+            // Undefined enum values are a configuration error, but without this they surface at
+            // request time: an unknown algorithm throws out of HmacComputer and becomes a 500, and
+            // an unknown encoding makes every decode fail so every request 401s as
+            // signature_malformed. Neither reads as "you passed a cast integer".
+            if (!Enum.IsDefined(typeof(HmacAlgorithm), Algorithm))
+            {
+                return FormattableString.Invariant($"'{Algorithm}' is not a known HMAC algorithm.");
+            }
+
+            if (!Enum.IsDefined(typeof(SignatureEncoding), Encoding))
+            {
+                return FormattableString.Invariant($"'{Encoding}' is not a known signature encoding.");
             }
 
             if (Timestamp is object && !Template.ReferencesTimestamp)

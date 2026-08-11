@@ -49,7 +49,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         /// <summary>The template could not be resolved for a reason not covered above.</summary>
         public const string TemplateInvalid = "template_invalid";
 
-        /// <summary>No usable secret was available: none configured, or the only candidate had expired.</summary>
+        /// <summary>The secret provider returned nothing, so the endpoint has no secret configured.</summary>
         public const string SecretUnavailable = "secret_unavailable";
 
         /// <summary>

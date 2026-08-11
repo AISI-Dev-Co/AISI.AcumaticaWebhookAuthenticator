@@ -149,6 +149,32 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
+        public void AnUndefinedAlgorithmIsRejectedAtConstruction()
+        {
+            // Without this the cast lands at request time, where HmacComputer throws and the caller
+            // gets a 500 that reads as a library fault rather than a configuration one.
+            var options = new HmacAuthOptions(Secret(), "X-Signature")
+            {
+                Algorithm = (HmacAlgorithm)99,
+            };
+
+            Assert.Throws<ArgumentException>(() => new HmacAuthenticator(options));
+        }
+
+        [Fact]
+        public void AnUndefinedEncodingIsRejectedAtConstruction()
+        {
+            // This one is worse than a crash: every decode silently fails, so every request 401s as
+            // signature_malformed and the endpoint looks like the sender's fault indefinitely.
+            var options = new HmacAuthOptions(Secret(), "X-Signature")
+            {
+                Encoding = (SignatureEncoding)42,
+            };
+
+            Assert.Throws<ArgumentException>(() => new HmacAuthenticator(options));
+        }
+
+        [Fact]
         public void ADefaultAuthResultReportsAFailureRatherThanANullCode()
         {
             AuthResult result = default;

@@ -165,32 +165,34 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 throw new ArgumentNullException(nameof(context));
             }
 
-            var buffer = new MemoryStream();
             StringBuilder? preview = capturePreview ? new StringBuilder() : null;
 
-            foreach (Segment segment in _segments)
+            using (var buffer = new MemoryStream())
             {
-                if (segment.Kind == SegmentKind.Body)
+                foreach (Segment segment in _segments)
                 {
-                    buffer.Write(context.Body, 0, context.Body.Length);
+                    if (segment.Kind == SegmentKind.Body)
+                    {
+                        buffer.Write(context.Body, 0, context.Body.Length);
 
-                    // Lossy by design, and only ever for display: the digest is computed from the
-                    // bytes written above, never from this string.
-                    preview?.Append(Encoding.UTF8.GetString(context.Body));
-                    continue;
+                        // Lossy by design, and only ever for display: the digest is computed from
+                        // the bytes written above, never from this string.
+                        preview?.Append(Encoding.UTF8.GetString(context.Body));
+                        continue;
+                    }
+
+                    if (!TryResolveScalar(segment, context, timestampRaw, out string text, out string failureCode))
+                    {
+                        return TemplateResolution.Failed(failureCode);
+                    }
+
+                    byte[] encoded = Encoding.UTF8.GetBytes(text);
+                    buffer.Write(encoded, 0, encoded.Length);
+                    preview?.Append(text);
                 }
 
-                if (!TryResolveScalar(segment, context, timestampRaw, out string text, out string failureCode))
-                {
-                    return TemplateResolution.Failed(failureCode);
-                }
-
-                byte[] encoded = Encoding.UTF8.GetBytes(text);
-                buffer.Write(encoded, 0, encoded.Length);
-                preview?.Append(text);
+                return TemplateResolution.Succeeded(buffer.ToArray(), preview?.ToString() ?? string.Empty);
             }
-
-            return TemplateResolution.Succeeded(buffer.ToArray(), preview?.ToString() ?? string.Empty);
         }
 
         private static bool TryResolveScalar(
