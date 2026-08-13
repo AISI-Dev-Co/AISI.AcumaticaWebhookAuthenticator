@@ -23,6 +23,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
     /// already has access to the secret. Handing it to a caller would let them derive a valid
     /// signature for a payload of their choosing.
     /// </para>
+    /// <para>
+    /// The verdict is produced by running the real <see cref="HmacAuthenticator"/> rather than by
+    /// re-implementing its decision logic, so the report can never disagree with what production
+    /// would have done. The cost is that extraction and hashing run twice per call; for a
+    /// manually-invoked diagnostic that is the right trade, and re-implementing the decision to
+    /// save it would reintroduce the drift the design avoids.
+    /// </para>
     /// </remarks>
     public static class WebhookSignatureTester
     {
@@ -55,35 +62,78 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
             context.TryGetHeaderValues(options.SignatureHeader, out IReadOnlyList<string> headerValues);
             IReadOnlyList<string> provided = options.Extraction.Extract(headerValues);
-            string? timestampRaw = options.Timestamp?.ReadRaw(context, headerValues);
-
-            TemplateResolution resolution = options.Template.Resolve(context, timestampRaw, capturePreview: true);
             AuthResult outcome = new HmacAuthenticator(options).Authenticate(context);
+            WebhookSecret? secret = options.SecretProvider.GetSecret();
+
+            string preview = string.Empty;
+            string? timestampRaw = null;
+            var expected = new List<string>();
+
+            if (options.Timestamp is object && options.Timestamp.ReadsFromSignatureHeader)
+            {
+                // Mirrors the authenticator: each header value carries its own timestamp, so each
+                // produces its own signed payload and its own acceptable signatures. Reporting only
+                // the first value's would show a legitimate match against the second value beside
+                // expected signatures it cannot equal.
+                foreach (string headerValue in headerValues)
+                {
+                    string? valueTimestamp = options.Timestamp.ReadRaw(context, new[] { headerValue });
+                    timestampRaw ??= valueTimestamp;
+
+                    TemplateResolution resolution = options.Template.Resolve(
+                        context,
+                        valueTimestamp,
+                        capturePreview: true);
+
+                    if (!resolution.Success)
+                    {
+                        continue;
+                    }
+
+                    if (preview.Length == 0)
+                    {
+                        preview = resolution.Preview;
+                    }
+
+                    AppendExpected(expected, options, secret, context, resolution);
+                }
+            }
+            else
+            {
+                timestampRaw = options.Timestamp?.ReadRaw(context, headerValues);
+
+                TemplateResolution resolution = options.Template.Resolve(
+                    context,
+                    timestampRaw,
+                    capturePreview: true);
+
+                if (resolution.Success)
+                {
+                    preview = resolution.Preview;
+                    AppendExpected(expected, options, secret, context, resolution);
+                }
+            }
 
             return new SignatureTestReport(
                 outcome.Succeeded,
                 outcome.FailureCode,
                 options.Template.Pattern,
-                resolution.Preview,
+                preview,
                 timestampRaw,
-                ExpectedSignatures(options, context, resolution),
+                expected,
                 provided);
         }
 
-        private static IReadOnlyList<string> ExpectedSignatures(
+        private static void AppendExpected(
+            List<string> expected,
             HmacAuthOptions options,
+            WebhookSecret? secret,
             WebhookAuthContext context,
             TemplateResolution resolution)
         {
-            if (!resolution.Success)
-            {
-                return Array.Empty<string>();
-            }
-
-            WebhookSecret? secret = options.SecretProvider.GetSecret();
             if (secret is null)
             {
-                return Array.Empty<string>();
+                return;
             }
 
             IReadOnlyList<byte[]> digests = secret.ComputeDiagnosticDigests(
@@ -91,13 +141,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 resolution.Bytes,
                 context.ReceivedOn);
 
-            var rendered = new List<string>(digests.Count);
             foreach (byte[] digest in digests)
             {
-                rendered.Add((options.SignaturePrefix ?? string.Empty) + SignatureCodec.Encode(digest, options.Encoding));
-            }
+                string rendered =
+                    (options.SignaturePrefix ?? string.Empty) + SignatureCodec.Encode(digest, options.Encoding);
 
-            return rendered;
+                if (!expected.Contains(rendered))
+                {
+                    expected.Add(rendered);
+                }
+            }
         }
     }
 }

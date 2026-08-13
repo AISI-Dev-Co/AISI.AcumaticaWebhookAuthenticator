@@ -46,6 +46,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <summary>Wire format of the timestamp.</summary>
         public TimestampFormat Format { get; }
 
+        /// <summary>
+        /// Whether the timestamp is read out of the signature header itself rather than a header of
+        /// its own. When it is, the timestamp belongs to <em>one</em> signature header value — so on
+        /// a request whose signature header arrived more than once, each value's signatures must be
+        /// verified against the payload built from that value's own timestamp, not the first one's.
+        /// </summary>
+        public bool ReadsFromSignatureHeader => _signatureHeaderElement is object;
+
         /// <summary>How far from the receipt time a request may be, in either direction.</summary>
         public TimeSpan Tolerance { get; }
 

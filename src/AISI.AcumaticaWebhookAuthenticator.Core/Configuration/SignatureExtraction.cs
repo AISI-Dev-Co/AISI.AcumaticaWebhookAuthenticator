@@ -104,10 +104,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             if (_elementKey is null)
             {
-                // Split even in whole-value mode. WebhookAuthContext asks callers to fold a repeated
-                // header into one comma-separated value, per HTTP field-value semantics, and handing
-                // that folded string straight to a hex or base64 decoder fails. Neither alphabet
-                // contains a comma, so splitting cannot corrupt a single well-formed signature.
+                // Split even in whole-value mode. Repeated headers normally reach the context as
+                // distinct values, but a caller using the single-valued constructor delivers them
+                // already comma-joined, and an intermediary may fold them regardless. Neither the
+                // hex nor the base64 alphabet contains a comma, so splitting cannot corrupt a
+                // single well-formed signature.
                 var whole = new List<string>();
 
                 foreach (string part in headerValue!.Split(','))

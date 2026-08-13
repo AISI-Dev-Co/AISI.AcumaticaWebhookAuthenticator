@@ -87,10 +87,23 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(AuthFailureCode.SignatureHeaderMissing);
             }
 
-            IReadOnlyList<string> candidates = _extraction.Extract(headerValues);
-            if (candidates.Count == 0)
+            WebhookSecret? secret = _secretProvider.GetSecret();
+            if (secret is null)
             {
-                return AuthResult.Fail(AuthFailureCode.SignatureElementMissing);
+                // A missing secret denies the request. It never degrades to unauthenticated
+                // handling, which would turn a blank secret field into an open endpoint.
+                return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
+            }
+
+            // A timestamp read out of the signature header belongs to one header value, and the
+            // header may have arrived more than once. Each value's signatures must then verify
+            // against the payload built from that value's own timestamp — pairing every candidate
+            // with the first value's timestamp would make a legitimately signed second value
+            // unverifiable. A timestamp from its own header (or no timestamp) is shared by all
+            // values, so those schemes verify everything against one resolution.
+            if (_timestamp is object && _timestamp.ReadsFromSignatureHeader)
+            {
+                return AuthenticatePerHeaderValue(context, headerValues, secret);
             }
 
             string? timestampRaw = _timestamp?.ReadRaw(context, headerValues);
@@ -101,45 +114,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(resolution.FailureCode);
             }
 
-            WebhookSecret? secret = _secretProvider.GetSecret();
-            if (secret is null)
-            {
-                // A missing secret denies the request. It never degrades to unauthenticated
-                // handling, which would turn a blank secret field into an open endpoint.
-                return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
-            }
-
-            var decoded = new List<byte[]>(candidates.Count);
-            string rejectionCode = AuthFailureCode.SignatureMismatch;
-
-            foreach (string candidate in candidates)
-            {
-                if (!TryStripPrefix(candidate, out string encodedSignature))
-                {
-                    if (decoded.Count == 0)
-                    {
-                        rejectionCode = AuthFailureCode.SignaturePrefixMismatch;
-                    }
-
-                    continue;
-                }
-
-                if (!SignatureCodec.TryDecode(encodedSignature, _encoding, out byte[] provided))
-                {
-                    if (decoded.Count == 0)
-                    {
-                        rejectionCode = AuthFailureCode.SignatureMalformed;
-                    }
-
-                    continue;
-                }
-
-                decoded.Add(provided);
-            }
+            var rejection = new RejectionTracker();
+            List<byte[]> decoded = DecodeCandidates(_extraction.Extract(headerValues), rejection);
 
             if (decoded.Count == 0)
             {
-                return AuthResult.Fail(rejectionCode);
+                return AuthResult.Fail(rejection.Code);
             }
 
             if (!secret.MatchesAny(_algorithm, resolution.Bytes, decoded, context.ReceivedOn))
@@ -152,6 +132,100 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return _timestamp is null
                 ? AuthResult.Success()
                 : _timestamp.Validate(timestampRaw, context.ReceivedOn);
+        }
+
+        private AuthResult AuthenticatePerHeaderValue(
+            WebhookAuthContext context,
+            IReadOnlyList<string> headerValues,
+            WebhookSecret secret)
+        {
+            var rejection = new RejectionTracker();
+
+            foreach (string headerValue in headerValues)
+            {
+                IReadOnlyList<string> candidates = _extraction.Extract(headerValue);
+                if (candidates.Count == 0)
+                {
+                    continue;
+                }
+
+                string? timestampRaw = _timestamp!.ReadRaw(context, new[] { headerValue });
+
+                TemplateResolution resolution = _template.Resolve(context, timestampRaw);
+                if (!resolution.Success)
+                {
+                    rejection.Consider(RejectionTracker.StageTemplate, resolution.FailureCode);
+                    continue;
+                }
+
+                List<byte[]> decoded = DecodeCandidates(candidates, rejection);
+                if (decoded.Count == 0)
+                {
+                    continue;
+                }
+
+                if (secret.MatchesAny(_algorithm, resolution.Bytes, decoded, context.ReceivedOn))
+                {
+                    // The window is checked against the timestamp that produced the matching
+                    // payload — not against whichever value happened to carry the freshest one.
+                    return _timestamp.Validate(timestampRaw, context.ReceivedOn);
+                }
+
+                rejection.Consider(RejectionTracker.StageCompare, AuthFailureCode.SignatureMismatch);
+            }
+
+            return AuthResult.Fail(rejection.Code);
+        }
+
+        private List<byte[]> DecodeCandidates(IReadOnlyList<string> candidates, RejectionTracker rejection)
+        {
+            var decoded = new List<byte[]>(candidates.Count);
+
+            foreach (string candidate in candidates)
+            {
+                if (!TryStripPrefix(candidate, out string encodedSignature))
+                {
+                    rejection.Consider(RejectionTracker.StagePrefix, AuthFailureCode.SignaturePrefixMismatch);
+                    continue;
+                }
+
+                if (!SignatureCodec.TryDecode(encodedSignature, _encoding, out byte[] provided))
+                {
+                    rejection.Consider(RejectionTracker.StageDecode, AuthFailureCode.SignatureMalformed);
+                    continue;
+                }
+
+                decoded.Add(provided);
+            }
+
+            return decoded;
+        }
+
+        /// <summary>
+        /// Keeps the diagnostic code from the candidate that progressed furthest through the
+        /// pipeline, so the trace names the most specific problem rather than whichever candidate
+        /// happened to fail last. A request carrying both a malformed-but-prefixed signature and an
+        /// unprefixed one reports "malformed", in either order.
+        /// </summary>
+        private sealed class RejectionTracker
+        {
+            public const int StageTemplate = 1;
+            public const int StagePrefix = 2;
+            public const int StageDecode = 3;
+            public const int StageCompare = 4;
+
+            private int _rank = -1;
+
+            public string Code { get; private set; } = AuthFailureCode.SignatureElementMissing;
+
+            public void Consider(int rank, string code)
+            {
+                if (rank > _rank)
+                {
+                    _rank = rank;
+                    Code = code;
+                }
+            }
         }
 
         private bool TryStripPrefix(string candidate, out string signature)

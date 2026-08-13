@@ -81,7 +81,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, IReadOnlyList<string>> header in headers)
             {
-                _headers[header.Key] = header.Value ?? NoValues;
+                _headers[header.Key] = Sanitize(header.Value);
             }
         }
 
@@ -176,10 +176,46 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             var widened = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> header in headers)
             {
-                widened[header.Key] = new[] { header.Value };
+                // The nullable annotations promise non-null values, but the intended caller is a
+                // net48 adapter where the compiler enforces nothing. A null slipping through here
+                // would surface as an ArgumentNullException inside template resolution - a 500 on
+                // the request path, which this library's own rules forbid.
+                widened[header.Key] = new[] { header.Value is null ? string.Empty : header.Value };
             }
 
             return widened;
+        }
+
+        private static IReadOnlyList<string> Sanitize(IReadOnlyList<string>? values)
+        {
+            if (values is null || values.Count == 0)
+            {
+                return NoValues;
+            }
+
+            bool hasNull = false;
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (values[i] is null)
+                {
+                    hasNull = true;
+                    break;
+                }
+            }
+
+            if (!hasNull)
+            {
+                return values;
+            }
+
+            // Copied only on the rare null-carrying path, so the common case stays allocation-free.
+            var cleaned = new string[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                cleaned[i] = values[i] is null ? string.Empty : values[i];
+            }
+
+            return cleaned;
         }
     }
 }

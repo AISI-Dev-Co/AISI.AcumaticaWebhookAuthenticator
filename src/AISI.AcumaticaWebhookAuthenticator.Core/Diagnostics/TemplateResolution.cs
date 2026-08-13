@@ -22,6 +22,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
         /// <summary>
         /// The exact bytes to sign. Empty when <see cref="Success"/> is <see langword="false"/>.
+        /// For a template that is exactly <c>{body}</c> this aliases the request body buffer rather
+        /// than copying it — treat it as read-only.
         /// </summary>
         public byte[] Bytes { get; }
 

@@ -165,9 +165,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 throw new ArgumentNullException(nameof(context));
             }
 
+            // The single-{body} template is the overwhelmingly common case (GitHub, Shopify) and
+            // needs no composition at all: the signed payload IS the request body. Handing the
+            // buffer back avoids copying every payload on the hot path - which the deliberate
+            // refusal to defensively copy WebhookAuthContext.Body would otherwise be undone by.
+            if (_segments.Count == 1 && _segments[0].Kind == SegmentKind.Body)
+            {
+                return TemplateResolution.Succeeded(
+                    context.Body,
+                    capturePreview ? Encoding.UTF8.GetString(context.Body) : string.Empty);
+            }
+
             StringBuilder? preview = capturePreview ? new StringBuilder() : null;
 
-            using (var buffer = new MemoryStream())
+            using (var buffer = new MemoryStream(context.Body.Length + Pattern.Length + 32))
             {
                 foreach (Segment segment in _segments)
                 {
