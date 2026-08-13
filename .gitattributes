@@ -1,0 +1,10 @@
+# .editorconfig declares end_of_line = lf; without this a Windows checkout commits CRLF back and
+# every file shows as fully rewritten in the next diff.
+* text=auto eol=lf
+
+*.sln text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.snk binary
+*.dll binary
