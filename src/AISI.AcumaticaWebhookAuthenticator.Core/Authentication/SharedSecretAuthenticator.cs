@@ -17,7 +17,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class SharedSecretAuthenticator : IWebhookAuthenticator
     {
-        #region Construction and state
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _secretHeader;
         private readonly CredentialVerifier.TryDecode _decode;
@@ -52,9 +51,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return true;
             };
         }
-        #endregion
 
-        #region Authentication
         /// <inheritdoc/>
         public string Code => "SECRET";
 
@@ -68,6 +65,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             return CredentialVerifier.Authenticate(context, _secretProvider, _secretHeader, _decode);
         }
-        #endregion
     }
 }
