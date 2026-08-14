@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      net48 because that is what Acumatica 2025 R2 and 2026 R1 run the handler in. The
+      platform-agnostic logic lives in the netstandard2.0 Core project; this assembly is the thin
+      binding to PX.* and is the only one that needs a site's Bin to compile.
+    -->
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Acumatica</AssemblyName>
+    <RootNamespace>AISI.AcumaticaWebhookAuthenticator.Acumatica</RootNamespace>
+    <Description>Acumatica ERP binding for AISI.AcumaticaWebhookAuthenticator: IWebhookHandler base with authentication, DAC-backed secret storage, and a maintenance graph.</Description>
+    <!--
+      Not packable. Acumatica publishes no PX.* packages to nuget.org, so a package of this
+      assembly could not declare its real dependencies; it ships inside a customization project
+      instead. Only the Core package goes to NuGet.
+    -->
+    <IsPackable>false</IsPackable>
+    <!--
+      Where the licensed Acumatica assemblies come from. Set it on the command line
+      (-p:AcumaticaBinPath=...) or via the ACUMATICA_BIN environment variable. There is no
+      default: guessing a site path would make the build succeed or fail depending on what happens
+      to be installed, and reference whatever version it found.
+    -->
+    <AcumaticaBinPath Condition="'$(AcumaticaBinPath)' == ''">$(ACUMATICA_BIN)</AcumaticaBinPath>
+  </PropertyGroup>
+
+  <!--
+    A loud, early failure rather than a pile of CS0246s. This project must never silently no-op
+    when the Bin is missing: a build that skips compilation and still reports success is the
+    false-verification defect this repository has already been bitten by.
+  -->
+  <Target Name="EnsureAcumaticaBinPath" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(AcumaticaBinPath)' == ''"
+           Text="AcumaticaBinPath is not set. Point it at a local Acumatica site's Bin directory, e.g. dotnet build -p:AcumaticaBinPath=&quot;C:\AcumaticaSites\MySite\Bin&quot;, or set the ACUMATICA_BIN environment variable." />
+    <Error Condition="'$(AcumaticaBinPath)' != '' And !Exists('$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll')"
+           Text="'$(AcumaticaBinPath)' does not contain PX.Api.Webhooks.Abstractions.dll. AcumaticaBinPath must point at an Acumatica 2025 R2+ site's Bin directory." />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AISI.AcumaticaWebhookAuthenticator.Core\AISI.AcumaticaWebhookAuthenticator.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Every Acumatica reference carries <Private>False</Private> so no licensed assembly is copied
+    into the output. Acumatica's own webhook sample omits this on its Abstractions reference; do
+    not copy that mistake.
+  -->
+  <ItemGroup>
+    <Reference Include="PX.Api.Webhooks.Abstractions">
+      <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Api.Webhooks">
+      <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Data">
+      <HintPath>$(AcumaticaBinPath)\PX.Data.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Data.BQL.Fluent">
+      <HintPath>$(AcumaticaBinPath)\PX.Data.BQL.Fluent.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Common">
+      <HintPath>$(AcumaticaBinPath)\PX.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Common.Std">
+      <HintPath>$(AcumaticaBinPath)\PX.Common.Std.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives">
+      <HintPath>$(AcumaticaBinPath)\Microsoft.Extensions.Primitives.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
