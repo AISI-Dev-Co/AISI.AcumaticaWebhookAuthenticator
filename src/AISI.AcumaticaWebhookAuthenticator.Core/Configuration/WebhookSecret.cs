@@ -205,6 +205,35 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
+        /// Whether <paramref name="provided"/> is byte-for-byte equal to any secret live at
+        /// <paramref name="asOf"/>. This is direct credential comparison — no hashing — for the
+        /// schemes where the caller presents the secret itself rather than a signature over the
+        /// request: <c>SECRET</c> and <c>BASIC</c>.
+        /// </summary>
+        /// <param name="provided">The credential supplied on the request. May be null; null never matches.</param>
+        /// <param name="asOf">The instant to evaluate the rotation window against.</param>
+        /// <returns><see langword="true"/> when the credential matches a live secret.</returns>
+        /// <remarks>
+        /// Comparison is fixed-time per candidate and deliberately not short-circuited across the
+        /// current and rotating secrets, for the same reason as <see cref="MatchesAny"/>: an early
+        /// return would reveal through timing which of the two is live. Per the
+        /// <see cref="Signing.FixedTimeComparer"/> contract, lengths are not treated as secret — a
+        /// caller can learn the credential's length through timing, which is the same property the
+        /// BCL comparer has.
+        /// </remarks>
+        public bool MatchesValue(byte[]? provided, DateTimeOffset asOf)
+        {
+            bool matched = false;
+
+            foreach (byte[] key in LiveKeys(asOf))
+            {
+                matched |= FixedTimeComparer.AreEqual(key, provided);
+            }
+
+            return matched;
+        }
+
+        /// <summary>
         /// Computes the digests this secret would produce, for display by
         /// <see cref="Diagnostics.WebhookSignatureTester"/>.
         /// </summary>

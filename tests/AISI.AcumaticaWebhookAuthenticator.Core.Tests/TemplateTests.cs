@@ -158,6 +158,23 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Theory]
+        [InlineData("{body}", false, false)]
+        [InlineData("{timestamp}.{body}", true, false)]
+        [InlineData("{path}{body}", false, true)]
+        [InlineData("{method}\n{path}\n{timestamp}\n{body}", true, true)]
+        [InlineData("", false, false)]
+        public void ReferenceFlags_ReportEveryTokenNotJustTheFirst(string pattern, bool timestamp, bool path)
+        {
+            // The adapter rejects {path} templates at handler construction on the strength of
+            // ReferencesPath, so a false negative here turns a construction-time error into a
+            // per-request 401. Both flags must be set even when the other token appears first.
+            SignedPayloadTemplate template = SignedPayloadTemplate.Parse(pattern);
+
+            Assert.Equal(timestamp, template.ReferencesTimestamp);
+            Assert.Equal(path, template.ReferencesPath);
+        }
+
+        [Theory]
         [InlineData("{nonsense}")]
         [InlineData("{body")]
         [InlineData("body}")]

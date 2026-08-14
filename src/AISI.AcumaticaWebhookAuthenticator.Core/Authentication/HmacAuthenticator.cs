@@ -74,6 +74,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <inheritdoc/>
         public string Code => _timestamp is null ? "HMAC" : "HMACTS";
 
+        /// <summary>
+        /// The signed-payload template this authenticator verifies against — the snapshot taken at
+        /// construction, not whatever <see cref="HmacAuthOptions.Template"/> holds now. Exposed so a
+        /// host that cannot satisfy a token can reject the configuration up front: the Acumatica
+        /// adapter refuses a <see cref="SignedPayloadTemplate.ReferencesPath"/> template at handler
+        /// construction, because the platform surfaces no request path and every request would
+        /// otherwise fail at runtime.
+        /// </summary>
+        public SignedPayloadTemplate Template => _template;
+
         /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {

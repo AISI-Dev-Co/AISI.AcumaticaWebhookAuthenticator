@@ -45,7 +45,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 if (segment.Kind == SegmentKind.Timestamp)
                 {
                     ReferencesTimestamp = true;
-                    break;
+                }
+                else if (segment.Kind == SegmentKind.Path)
+                {
+                    ReferencesPath = true;
                 }
             }
         }
@@ -64,6 +67,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         /// window over that timestamp would actually be covered by the signature.
         /// </summary>
         public bool ReferencesTimestamp { get; }
+
+        /// <summary>
+        /// Whether the template includes a <c>{path}</c> token. A host that cannot supply a request
+        /// path — Acumatica's <c>WebhookRequest</c> has no path member — should reject such a
+        /// template when the handler is constructed, rather than let every request fail
+        /// <c>template_path_unavailable</c> at runtime.
+        /// </summary>
+        public bool ReferencesPath { get; }
 
         /// <summary>
         /// Parses a template.

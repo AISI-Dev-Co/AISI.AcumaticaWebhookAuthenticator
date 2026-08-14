@@ -49,6 +49,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         /// <summary>The template could not be resolved for a reason not covered above.</summary>
         public const string TemplateInvalid = "template_invalid";
 
+        /// <summary>The header carrying the credential was not present on the request. Reported by the SECRET and BASIC schemes.</summary>
+        public const string CredentialMissing = "credential_missing";
+
+        /// <summary>The credential was present but not in the expected shape: wrong authorization scheme, invalid base64, or a missing prefix.</summary>
+        public const string CredentialMalformed = "credential_malformed";
+
+        /// <summary>The credential was well formed but did not match any live secret.</summary>
+        public const string CredentialMismatch = "credential_mismatch";
+
+        /// <summary>The configured client-address header was not present on the request.</summary>
+        public const string ClientAddressMissing = "client_address_missing";
+
+        /// <summary>The client-address header was present but no address could be read at the trusted depth.</summary>
+        public const string ClientAddressMalformed = "client_address_malformed";
+
+        /// <summary>The client address was read but is not on the allowlist.</summary>
+        public const string ClientAddressDenied = "client_address_denied";
+
         /// <summary>The secret provider returned nothing, so the endpoint has no secret configured.</summary>
         public const string SecretUnavailable = "secret_unavailable";
 
