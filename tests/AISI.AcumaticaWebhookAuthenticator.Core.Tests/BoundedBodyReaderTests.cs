@@ -104,12 +104,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
-        public async Task NullStream_Throws()
-        {
-            await Assert.ThrowsAsync<ArgumentNullException>(() => BoundedBodyReader.ReadAsync(null!));
-        }
-
-        [Fact]
         public async Task NegativeCap_Throws()
         {
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(

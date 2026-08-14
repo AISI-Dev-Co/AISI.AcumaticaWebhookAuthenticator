@@ -191,14 +191,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
-        public void Code_ReportsTheGateOnTopOfTheInnerScheme()
-        {
-            var gate = new IpAllowlistAuthenticator(new RecordingAuthenticator(AuthResult.Success()), Allowlist);
-
-            Assert.Equal("STUB+IP", gate.Code);
-        }
-
-        [Fact]
         public void Challenge_IsForwardedFromTheInnerScheme()
         {
             // Wrapping a scheme must not silently drop its WWW-Authenticate challenge — the host

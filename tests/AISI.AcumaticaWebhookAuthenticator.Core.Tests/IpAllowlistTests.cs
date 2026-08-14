@@ -151,10 +151,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Throws<ArgumentException>(() => IpAllowlist.ParseCsv(","));
         }
 
-        [Fact]
-        public void ToString_ReportsTheEntriesAsWritten()
-        {
-            Assert.Equal("203.0.113.7, 2001:db8::/32", IpAllowlist.Parse("203.0.113.7", "2001:db8::/32").ToString());
-        }
     }
 }

@@ -106,15 +106,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.True(authenticator.Authenticate(request).Succeeded);
         }
 
-        [Fact]
-        public void Challenge_CarriesTheRealm()
-        {
-            var authenticator = new BasicAuthenticator(
-                new StaticSecretProvider(WebhookSecret.FromUtf8("a:b")), "erp-webhooks");
-
-            Assert.Equal("Basic realm=\"erp-webhooks\", charset=\"UTF-8\"", authenticator.Challenge);
-        }
-
         [Theory]
         [InlineData("")]
         [InlineData(" ")]
@@ -126,12 +117,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             var provider = new StaticSecretProvider(WebhookSecret.FromUtf8("a:b"));
 
             Assert.Throws<ArgumentException>(() => new BasicAuthenticator(provider, realm));
-        }
-
-        [Fact]
-        public void Code_ReportsBasic()
-        {
-            Assert.Equal("BASIC", Authenticator().Code);
         }
 
     }

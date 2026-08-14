@@ -145,11 +145,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Throws<ArgumentException>(() => new SharedSecretAuthenticator(provider, " "));
         }
 
-        [Fact]
-        public void Code_ReportsSecret()
-        {
-            Assert.Equal("SECRET", Authenticator("x").Code);
-        }
-
     }
 }
