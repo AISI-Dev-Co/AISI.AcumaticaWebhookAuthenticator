@@ -19,8 +19,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// </remarks>
     public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint>
     {
-        private static readonly char[] AllowlistSeparators = { ',' };
-
         // The framework populates action and view members by reflection during graph
         // construction; the null-forgiving initialisers acknowledge that, they do not perform it.
 
@@ -63,7 +61,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             try
             {
-                IpAllowlist.Parse(text.Split(AllowlistSeparators, StringSplitOptions.RemoveEmptyEntries));
+                IpAllowlist.ParseCsv(text);
             }
             catch (FormatException failure)
             {
@@ -110,9 +108,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         private static void RejectOverlongSecret(AISIWebhookSecret? row, object? newValue, string fieldLabel)
         {
-            if (newValue is string text && text.Length > 255)
+            if (newValue is string text && text.Length > AISIWebhookSecret.SecretLength)
             {
-                throw new PXSetPropertyException(row, Messages.SecretTooLong, fieldLabel, text.Length);
+                throw new PXSetPropertyException(
+                    row,
+                    Messages.SecretTooLong,
+                    fieldLabel,
+                    AISIWebhookSecret.SecretLength,
+                    text.Length);
             }
         }
     }

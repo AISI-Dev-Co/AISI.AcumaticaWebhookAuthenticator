@@ -26,18 +26,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// per-request handler instance still amortises them. The cache is short enough that an
     /// administrator's edit — a new secret, a changed allowlist — takes effect within a minute
     /// without an application restart, and the negative result is cached too, so a flood of
-    /// requests against an unconfigured endpoint does not become a query per request. Thread-safe.
+    /// requests against an unconfigured endpoint does not become a query per request. Entries are
+    /// <see cref="Lazy{T}"/> so an expiry under load refreshes with exactly one database read
+    /// instead of one per in-flight request. Thread-safe.
     /// </para>
     /// </remarks>
-    public sealed class ErpSecretProvider : IWebhookSecretProvider
+    public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
         /// <summary>How long a read (including a miss) is reused before the database is consulted again.</summary>
         public static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-        private static readonly ConcurrentDictionary<Guid, CacheEntry> Cache =
-            new ConcurrentDictionary<Guid, CacheEntry>();
-
-        private static readonly char[] AllowlistSeparators = { ',' };
+        private static readonly ConcurrentDictionary<Guid, Lazy<CacheEntry>> Cache =
+            new ConcurrentDictionary<Guid, Lazy<CacheEntry>>();
 
         private readonly Guid _webhookId;
 
@@ -66,7 +66,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// baked into the authenticator at construction.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="inner"/> is null.</exception>
-        public IWebhookAuthenticator ApplyConfiguredAllowlist(IWebhookAuthenticator inner)
+        public IWebhookAuthenticator Refine(IWebhookAuthenticator inner)
         {
             if (inner is null)
             {
@@ -91,26 +91,35 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             return new IpAllowlistAuthenticator(
                 inner,
                 entry.Allowlist,
-                entry.ClientAddressHeader!,
+                entry.ClientAddressHeader,
                 entry.TrustedProxyDepth);
         }
 
         private CacheEntry Current()
         {
-            DateTime now = DateTime.UtcNow;
-
-            if (Cache.TryGetValue(_webhookId, out CacheEntry entry) && now - entry.FetchedOn < CacheDuration)
+            while (true)
             {
-                return entry;
-            }
+                Lazy<CacheEntry> lazy = Cache.GetOrAdd(_webhookId, CreateEntry);
+                CacheEntry entry = lazy.Value;
 
-            entry = Load(now);
-            Cache[_webhookId] = entry;
-            return entry;
+                if (DateTime.UtcNow - entry.FetchedOn < CacheDuration)
+                {
+                    return entry;
+                }
+
+                // Swap the stale entry for a fresh Lazy; whichever thread wins the swap loads
+                // once, and every loser re-reads the winner's value on the next pass.
+                Cache.TryUpdate(_webhookId, CreateEntry(_webhookId), lazy);
+            }
         }
 
-        private CacheEntry Load(DateTime fetchedOn)
+        private Lazy<CacheEntry> CreateEntry(Guid webhookId) =>
+            new Lazy<CacheEntry>(Load, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+
+        private CacheEntry Load()
         {
+            DateTime fetchedOn = DateTime.UtcNow;
+
             var graph = PXGraph.CreateInstance<PXGraph>();
             PXCache cache = graph.Caches[typeof(AISIWebhookSecret)];
 
@@ -124,7 +133,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (row is null)
             {
-                return new CacheEntry(null, null, null, 1, false, fetchedOn);
+                return new CacheEntry(null, null, null, IpAllowlistAuthenticator.DefaultTrustedProxyDepth, false, fetchedOn);
             }
 
             WebhookSecret? secret = null;
@@ -144,9 +153,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             IpAllowlist? allowlist = null;
             bool allowlistBroken = false;
             string header = string.IsNullOrWhiteSpace(row.ClientAddressHeader)
-                ? "X-Forwarded-For"
+                ? IpAllowlistAuthenticator.DefaultClientAddressHeader
                 : row.ClientAddressHeader!.Trim();
-            int depth = row.TrustedProxyDepth is int value && value >= 1 ? value : 1;
+            int depth = row.TrustedProxyDepth is int value && value >= 1
+                ? value
+                : IpAllowlistAuthenticator.DefaultTrustedProxyDepth;
 
             if (!string.IsNullOrWhiteSpace(row.AllowedAddresses))
             {
@@ -154,18 +165,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 // allowlist that cannot be parsed fails closed rather than open.
                 try
                 {
-                    allowlist = IpAllowlist.Parse(
-                        row.AllowedAddresses!.Split(AllowlistSeparators, StringSplitOptions.RemoveEmptyEntries));
+                    allowlist = IpAllowlist.ParseCsv(row.AllowedAddresses!);
                 }
-                catch (FormatException failure)
-                {
-                    allowlistBroken = true;
-                    PXTrace.WriteError(
-                        "Webhook {0}: the stored IP allowlist could not be parsed and all requests will be denied until it is fixed on the webhook secrets screen. {1}",
-                        _webhookId,
-                        failure.Message);
-                }
-                catch (ArgumentException failure)
+                catch (Exception failure) when (failure is FormatException || failure is ArgumentException)
                 {
                     allowlistBroken = true;
                     PXTrace.WriteError(
@@ -178,7 +180,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             return new CacheEntry(secret, allowlist, header, depth, allowlistBroken, fetchedOn);
         }
 
-        private readonly struct CacheEntry
+        private sealed class CacheEntry
         {
             public CacheEntry(
                 WebhookSecret? secret,
@@ -190,7 +192,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             {
                 Secret = secret;
                 Allowlist = allowlist;
-                ClientAddressHeader = clientAddressHeader;
+                ClientAddressHeader = clientAddressHeader ?? IpAllowlistAuthenticator.DefaultClientAddressHeader;
                 TrustedProxyDepth = trustedProxyDepth;
                 AllowlistBroken = allowlistBroken;
                 FetchedOn = fetchedOn;
@@ -200,7 +202,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             public IpAllowlist? Allowlist { get; }
 
-            public string? ClientAddressHeader { get; }
+            public string ClientAddressHeader { get; }
 
             public int TrustedProxyDepth { get; }
 

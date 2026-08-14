@@ -11,122 +11,109 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
     public class BoundedBodyReaderTests
     {
         [Fact]
-        public void BodyUnderTheCap_IsReadCompletely()
+        public async Task BodyUnderTheCap_IsReadCompletely()
         {
             byte[] body = Bytes(1000);
 
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(body), maxLength: 2000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
         }
 
         [Fact]
-        public void BodyExactlyAtTheCap_IsAccepted()
+        public async Task BodyExactlyAtTheCap_IsAccepted()
         {
             byte[] body = Bytes(2000);
 
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(body), maxLength: 2000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
         }
 
         [Fact]
-        public void BodyOverTheCap_IsRejectedWithNothingRetained()
+        public async Task BodyOverTheCap_IsRejectedWithNothingRetained()
         {
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(Bytes(2001)), maxLength: 2000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(2001)), maxLength: 2000);
 
             Assert.False(result.WithinLimit);
             Assert.Empty(result.Body);
         }
 
         [Fact]
-        public void BodyMuchLargerThanOneChunk_IsRejectedWithoutBuffering()
+        public async Task BodyMuchLargerThanOneChunk_IsRejectedWithoutBuffering()
         {
             // 100k against a 2k cap: the reject must come from the running count, not from
             // accumulating everything first.
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(Bytes(100_000)), maxLength: 2000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(100_000)), maxLength: 2000);
 
             Assert.False(result.WithinLimit);
         }
 
         [Fact]
-        public void DeclaredLengthOverTheCap_RejectsWithoutReading()
+        public async Task DeclaredLengthOverTheCap_RejectsWithoutReading()
         {
             var source = new CountingStream(NonSeekable(Bytes(10)));
 
-            BoundedBodyRead result = BoundedBodyReader.Read(source, maxLength: 2000, declaredLength: 5000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(source, maxLength: 2000, declaredLength: 5000);
 
             Assert.False(result.WithinLimit);
             Assert.Equal(0, source.ReadCalls);
         }
 
         [Fact]
-        public void UnderdeclaredLength_DoesNotTruncateTheActualBody()
+        public async Task UnderdeclaredLength_DoesNotTruncateTheActualBody()
         {
             // A sender that declares 10 bytes and sends 1500 still gets the whole body read (the
             // declared value is a capacity hint, not a limit) — and still gets capped by maxLength.
             byte[] body = Bytes(1500);
 
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(body), maxLength: 2000, declaredLength: 10);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000, declaredLength: 10);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
         }
 
         [Fact]
-        public void LyingDeclaredLength_DoesNotBypassTheCap()
+        public async Task LyingDeclaredLength_DoesNotBypassTheCap()
         {
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(Bytes(3000)), maxLength: 2000, declaredLength: 10);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(3000)), maxLength: 2000, declaredLength: 10);
 
             Assert.False(result.WithinLimit);
         }
 
         [Fact]
-        public void NegativeDeclaredLength_IsIgnoredRatherThanThrowing()
+        public async Task NegativeDeclaredLength_IsIgnoredRatherThanThrowing()
         {
             byte[] body = Bytes(100);
 
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(body), maxLength: 2000, declaredLength: -1);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000, declaredLength: -1);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
         }
 
         [Fact]
-        public void EmptyBody_ReadsAsEmpty()
+        public async Task EmptyBody_ReadsAsEmpty()
         {
-            BoundedBodyRead result = BoundedBodyReader.Read(NonSeekable(Array.Empty<byte>()));
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Array.Empty<byte>()));
 
             Assert.True(result.WithinLimit);
             Assert.Empty(result.Body);
         }
 
         [Fact]
-        public async Task AsyncPath_BehavesLikeTheSyncPath()
+        public async Task NullStream_Throws()
         {
-            byte[] body = Bytes(1500);
-
-            BoundedBodyRead ok = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000);
-            BoundedBodyRead over = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(2001)), maxLength: 2000);
-
-            Assert.True(ok.WithinLimit);
-            Assert.Equal(body, ok.Body);
-            Assert.False(over.WithinLimit);
+            await Assert.ThrowsAsync<ArgumentNullException>(() => BoundedBodyReader.ReadAsync(null!));
         }
 
         [Fact]
-        public void NullStream_Throws()
+        public async Task NegativeCap_Throws()
         {
-            Assert.Throws<ArgumentNullException>(() => BoundedBodyReader.Read(null!));
-        }
-
-        [Fact]
-        public void NegativeCap_Throws()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(
-                () => BoundedBodyReader.Read(NonSeekable(Bytes(1)), maxLength: -1));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => BoundedBodyReader.ReadAsync(NonSeekable(Bytes(1)), maxLength: -1));
         }
 
         private static byte[] Bytes(int count)

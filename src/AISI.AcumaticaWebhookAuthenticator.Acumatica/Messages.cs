@@ -12,9 +12,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     [PXLocalizable]
     public static class Messages
     {
-        /// <summary>Field-verifying rejection for an over-long secret.</summary>
+        /// <summary>Field-verifying rejection for an over-long secret: label, limit, actual length.</summary>
         public const string SecretTooLong =
-            "{0} cannot exceed 255 characters; it is {1}. It was not saved - a truncated secret would never verify.";
+            "{0} cannot exceed {1} characters; it is {2}. It was not saved - a truncated secret would never verify.";
 
         /// <summary>The allowlist failed to parse; {0} carries the parser's reason.</summary>
         public const string AllowlistInvalid = "The IP allowlist is not valid: {0}";

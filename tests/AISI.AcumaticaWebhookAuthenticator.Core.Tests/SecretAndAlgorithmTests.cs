@@ -101,10 +101,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal(AuthFailureCode.SecretUnavailable, result.FailureCode);
         }
 
-        private sealed class NullSecretProvider : IWebhookSecretProvider
-        {
-            public WebhookSecret? GetSecret() => null;
-        }
     }
 
     public class AlgorithmTests

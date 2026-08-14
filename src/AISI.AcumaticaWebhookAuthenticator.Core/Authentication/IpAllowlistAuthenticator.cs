@@ -41,8 +41,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// signature work. Instances are immutable and safe to share across threads.
     /// </para>
     /// </remarks>
-    public sealed class IpAllowlistAuthenticator : IWebhookAuthenticator
+    public sealed class IpAllowlistAuthenticator : IWebhookAuthenticator, IChallengeSource, IRequestPathDependent
     {
+        /// <summary>The conventional forwarded-address header, used when none is configured.</summary>
+        public const string DefaultClientAddressHeader = "X-Forwarded-For";
+
+        /// <summary>The default trusted depth: a single trusted proxy.</summary>
+        public const int DefaultTrustedProxyDepth = 1;
+
         private readonly IpAllowlist _allowlist;
         private readonly string _clientAddressHeader;
 
@@ -66,8 +72,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         public IpAllowlistAuthenticator(
             IWebhookAuthenticator inner,
             IpAllowlist allowlist,
-            string clientAddressHeader = "X-Forwarded-For",
-            int trustedProxyDepth = 1)
+            string clientAddressHeader = DefaultClientAddressHeader,
+            int trustedProxyDepth = DefaultTrustedProxyDepth)
         {
             if (string.IsNullOrWhiteSpace(clientAddressHeader))
             {
@@ -103,6 +109,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// force rather than silently narrowing a scheme that reads as unrestricted.
         /// </summary>
         public string Code => Inner.Code + "+IP";
+
+        /// <summary>The inner scheme's challenge, so wrapping never silently drops it.</summary>
+        public string? Challenge => (Inner as IChallengeSource)?.Challenge;
+
+        /// <summary>The inner scheme's answer, so wrapping never hides the dependency.</summary>
+        public bool RequiresRequestPath => (Inner as IRequestPathDependent)?.RequiresRequestPath ?? false;
 
         /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)

@@ -33,6 +33,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
     [PXCacheName("Webhook Secret")]
     public class AISIWebhookSecret : PXBqlTable, IBqlTable
     {
+        /// <summary>
+        /// The crypt columns' declared length. The maintenance graph validates against the same
+        /// constant, so widening the column cannot silently reintroduce truncation.
+        /// </summary>
+        public const int SecretLength = 255;
+
         #region WebHookID
         /// <summary>The webhook registration this secret belongs to.</summary>
         [PXDBGuid(IsKey = true)]
@@ -48,7 +54,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 
         #region Secret
         /// <summary>The active secret, exactly as the sender's dashboard shows it.</summary>
-        [PXRSACryptString(255)]
+        [PXRSACryptString(SecretLength)]
         [PXDefault]
         [PXUIField(DisplayName = "Secret")]
         public virtual string? Secret { get; set; }
@@ -60,7 +66,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// The outgoing secret during a rotation overlap, accepted alongside
         /// <see cref="Secret"/> until <see cref="RotatingExpiresOn"/>.
         /// </summary>
-        [PXRSACryptString(255)]
+        [PXRSACryptString(SecretLength)]
         [PXUIField(DisplayName = "Rotating Secret")]
         public virtual string? RotatingSecret { get; set; }
         public abstract class rotatingSecret : BqlString.Field<rotatingSecret> { }
@@ -96,7 +102,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// <see cref="AllowedAddresses"/> is set.
         /// </summary>
         [PXDBString(64, IsUnicode = false)]
-        [PXDefault("X-Forwarded-For", PersistingCheck = PXPersistingCheck.Nothing)]
+        [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultClientAddressHeader, PersistingCheck = PXPersistingCheck.Nothing)]
         [PXUIField(DisplayName = "Client Address Header")]
         public virtual string? ClientAddressHeader { get; set; }
         public abstract class clientAddressHeader : BqlString.Field<clientAddressHeader> { }
@@ -108,7 +114,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// client address is read at exactly this depth from the right. 1 = one trusted proxy.
         /// </summary>
         [PXDBInt(MinValue = 1, MaxValue = 10)]
-        [PXDefault(1, PersistingCheck = PXPersistingCheck.Nothing)]
+        [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultTrustedProxyDepth, PersistingCheck = PXPersistingCheck.Nothing)]
         [PXUIField(DisplayName = "Trusted Proxy Depth")]
         public virtual int? TrustedProxyDepth { get; set; }
         public abstract class trustedProxyDepth : BqlInt.Field<trustedProxyDepth> { }

@@ -26,7 +26,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// share across threads.
     /// </para>
     /// </remarks>
-    public sealed class HmacAuthenticator : IWebhookAuthenticator
+    public sealed class HmacAuthenticator : IWebhookAuthenticator, IRequestPathDependent
     {
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _signatureHeader;
@@ -75,14 +75,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         public string Code => _timestamp is null ? "HMAC" : "HMACTS";
 
         /// <summary>
-        /// The signed-payload template this authenticator verifies against — the snapshot taken at
-        /// construction, not whatever <see cref="HmacAuthOptions.Template"/> holds now. Exposed so a
-        /// host that cannot satisfy a token can reject the configuration up front: the Acumatica
-        /// adapter refuses a <see cref="SignedPayloadTemplate.ReferencesPath"/> template at handler
-        /// construction, because the platform surfaces no request path and every request would
-        /// otherwise fail at runtime.
+        /// Whether the construction-time template snapshot signs <c>{path}</c>, and therefore
+        /// whether a host with no request path should reject this configuration up front.
         /// </summary>
-        public SignedPayloadTemplate Template => _template;
+        public bool RequiresRequestPath => _template.ReferencesPath;
 
         /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
@@ -193,7 +189,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             foreach (string candidate in candidates)
             {
-                if (!TryStripPrefix(candidate, out string encodedSignature))
+                if (!CredentialVerifier.TryStripPrefix(candidate, _signaturePrefix, out string encodedSignature))
                 {
                     rejection.Consider(RejectionTracker.StagePrefix, AuthFailureCode.SignaturePrefixMismatch);
                     continue;
@@ -238,22 +234,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
-        private bool TryStripPrefix(string candidate, out string signature)
-        {
-            if (string.IsNullOrEmpty(_signaturePrefix))
-            {
-                signature = candidate;
-                return true;
-            }
-
-            if (!candidate.StartsWith(_signaturePrefix!, StringComparison.Ordinal))
-            {
-                signature = string.Empty;
-                return false;
-            }
-
-            signature = candidate.Substring(_signaturePrefix!.Length);
-            return true;
-        }
     }
 }

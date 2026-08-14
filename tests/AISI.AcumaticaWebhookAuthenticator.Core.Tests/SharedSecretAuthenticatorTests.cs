@@ -151,9 +151,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal("SECRET", Authenticator("x").Code);
         }
 
-        private sealed class NullSecretProvider : IWebhookSecretProvider
-        {
-            public WebhookSecret? GetSecret() => null;
-        }
     }
 }

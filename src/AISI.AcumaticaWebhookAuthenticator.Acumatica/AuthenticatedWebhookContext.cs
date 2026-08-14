@@ -64,10 +64,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                         encoding = Encoding.GetEncoding(charSet);
                     }
                 }
-                catch (FormatException)
-                {
-                }
-                catch (ArgumentException)
+                catch (Exception failure) when (failure is FormatException || failure is ArgumentException)
                 {
                 }
             }

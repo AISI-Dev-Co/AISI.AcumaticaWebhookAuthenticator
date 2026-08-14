@@ -82,6 +82,28 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
+        /// Parses a comma-separated list of entries — the storage form configuration screens use.
+        /// The one tokenization both the editing screen and the request path call, so what the
+        /// screen accepts is what runs, by construction rather than by copy.
+        /// </summary>
+        /// <param name="entries">Comma-separated entries, e.g. <c>203.0.113.0/24, 2001:db8::/32</c>.</param>
+        /// <returns>The allowlist.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="entries"/> contains no entries.</exception>
+        /// <exception cref="FormatException">An entry is not an address or CIDR block.</exception>
+        public static IpAllowlist ParseCsv(string entries)
+        {
+            if (entries is null)
+            {
+                throw new ArgumentNullException(nameof(entries));
+            }
+
+            return Parse(entries.Split(CsvSeparators, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        private static readonly char[] CsvSeparators = { ',' };
+
+        /// <summary>
         /// Whether <paramref name="address"/> falls inside any entry.
         /// </summary>
         /// <param name="address">The address to test. Null is never contained.</param>

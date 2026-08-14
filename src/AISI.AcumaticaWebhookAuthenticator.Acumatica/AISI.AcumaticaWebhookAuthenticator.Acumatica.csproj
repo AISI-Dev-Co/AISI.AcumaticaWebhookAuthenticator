@@ -4,7 +4,9 @@
     <!--
       net48 because that is what Acumatica 2025 R2 and 2026 R1 run the handler in. The
       platform-agnostic logic lives in the netstandard2.0 Core project; this assembly is the thin
-      binding to PX.* and is the only one that needs a site's Bin to compile.
+      binding to PX.* and is the only shipped one that needs a site's Bin to compile.
+      RequiresAcumaticaBin brings in the shared Bin-path guard and the Acuminator analyzers from
+      Directory.Build.props.
     -->
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Acumatica</AssemblyName>
@@ -16,43 +18,11 @@
       instead. Only the Core package goes to NuGet.
     -->
     <IsPackable>false</IsPackable>
-    <!--
-      Where the licensed Acumatica assemblies come from. Set it on the command line
-      (-p:AcumaticaBinPath=...) or via the ACUMATICA_BIN environment variable. There is no
-      default: guessing a site path would make the build succeed or fail depending on what happens
-      to be installed, and reference whatever version it found.
-    -->
-    <AcumaticaBinPath Condition="'$(AcumaticaBinPath)' == ''">$(ACUMATICA_BIN)</AcumaticaBinPath>
+    <RequiresAcumaticaBin>true</RequiresAcumaticaBin>
   </PropertyGroup>
-
-  <!--
-    A loud, early failure rather than a pile of CS0246s. This project must never silently no-op
-    when the Bin is missing: a build that skips compilation and still reports success is the
-    false-verification defect this repository has already been bitten by.
-  -->
-  <Target Name="EnsureAcumaticaBinPath" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="'$(AcumaticaBinPath)' == ''"
-           Text="AcumaticaBinPath is not set. Point it at a local Acumatica site's Bin directory, e.g. dotnet build -p:AcumaticaBinPath=&quot;C:\AcumaticaSites\MySite\Bin&quot;, or set the ACUMATICA_BIN environment variable." />
-    <Error Condition="'$(AcumaticaBinPath)' != '' And !Exists('$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll')"
-           Text="'$(AcumaticaBinPath)' does not contain PX.Api.Webhooks.Abstractions.dll. AcumaticaBinPath must point at an Acumatica 2025 R2+ site's Bin directory." />
-  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\AISI.AcumaticaWebhookAuthenticator.Core\AISI.AcumaticaWebhookAuthenticator.Core.csproj" />
-  </ItemGroup>
-
-  <!--
-    Acumatica's own Roslyn analyzers, active on every build of this project. They only fire on
-    code that references PX.* - which is why they live here and in the smoke-test project, not in
-    the platform-agnostic core, where they would be configuration that looks live and is not.
-    With TreatWarningsAsErrors on, an Acuminator diagnostic fails the build - including the local
-    release build that produces the committed customization-package DLL.
-  -->
-  <ItemGroup>
-    <PackageReference Include="Acuminator.Analyzers" Version="4.0.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
   <!--

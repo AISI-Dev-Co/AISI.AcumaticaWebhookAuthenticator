@@ -114,17 +114,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 throw new ArgumentNullException(nameof(context));
             }
 
-            RegistrationEntry registration = _registrations.GetOrAdd(
-                context.Definition.Id,
-                BuildRegistration);
-
-            // The ERP-configured allowlist is applied per request, not baked in at construction,
-            // so an administrator's edit on the secrets screen takes effect on the provider's
-            // cache cadence instead of at the next application restart.
-            IWebhookAuthenticator authenticator = registration.Provider is ErpSecretProvider erp
-                ? erp.ApplyConfiguredAllowlist(registration.Authenticator)
-                : registration.Authenticator;
-
+            // The body is read before the authenticator is even resolved: an over-cap request is
+            // decided by the byte count alone, so it should not cost a secret-provider read.
             // No ConfigureAwait(false) anywhere in this method: Acumatica flows its own context
             // (tenant, PXTrace scope) across awaits, and detaching from it would run everything
             // after the first await - including the consumer's ProcessAsync - outside that
@@ -146,6 +137,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 Deny(context.Response, 413, "{\"error\":\"payload_too_large\"}", null);
                 return;
             }
+
+            RegistrationEntry registration = _registrations.GetOrAdd(
+                context.Definition.Id,
+                BuildRegistration);
+
+            // Per-request policy (the ERP-configured allowlist) is applied by the provider, not
+            // baked in at construction, so an administrator's edit on the secrets screen takes
+            // effect on the provider's cache cadence instead of at the next application restart.
+            // Asked for as a capability rather than a concrete type, so replacing or decorating
+            // the provider cannot silently drop the restriction.
+            IWebhookAuthenticator authenticator =
+                (registration.Provider as IAuthenticatorRefiner)?.Refine(registration.Authenticator)
+                ?? registration.Authenticator;
 
             WebhookAuthContext authContext = WebhookRequestMapper.Map(
                 context.Request,
@@ -169,7 +173,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     context.Response,
                     401,
                     "{\"error\":\"unauthorized\"}",
-                    (Unwrap(authenticator) as BasicAuthenticator)?.Challenge);
+                    (authenticator as IChallengeSource)?.Challenge);
                 return;
             }
 
@@ -185,15 +189,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 ?? throw new InvalidOperationException(
                     GetType().Name + ".CreateAuthenticator returned null.");
 
-            // The platform surfaces no request path, so a {path} template could never verify a
-            // single request. Failing here, once, names the misconfiguration; failing per request
-            // would read as a sender problem.
-            if (Unwrap(authenticator) is HmacAuthenticator hmac && hmac.Template.ReferencesPath)
+            // The platform surfaces no request path, so a configuration that signs {path} could
+            // never verify a single request. Failing here, once, names the misconfiguration;
+            // failing per request would read as a sender problem. Decorators forward the
+            // capability, so wrapping cannot hide the dependency.
+            if ((authenticator as IRequestPathDependent)?.RequiresRequestPath == true)
             {
                 throw new InvalidOperationException(
-                    "The signed-payload template '" + hmac.Template.Pattern + "' uses {path}, but " +
-                    "Acumatica's WebhookRequest does not expose a request path, so no request " +
-                    "could ever verify. Remove the {path} token from the template.");
+                    "The " + authenticator.Code + " configuration signs the request path, but " +
+                    "Acumatica's WebhookRequest does not expose one, so no request could ever " +
+                    "verify. Remove the {path} token from the signed-payload template.");
             }
 
             return new RegistrationEntry(authenticator, provider);
@@ -210,22 +215,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public IWebhookAuthenticator Authenticator { get; }
 
             public IWebhookSecretProvider Provider { get; }
-        }
-
-        /// <summary>
-        /// Sees through any <see cref="IpAllowlistAuthenticator"/> wrapping to the scheme
-        /// underneath, so gating an authenticator changes what it accepts and nothing else — the
-        /// template vetting and the BASIC challenge must not switch off because a wrapper was
-        /// added.
-        /// </summary>
-        private static IWebhookAuthenticator Unwrap(IWebhookAuthenticator authenticator)
-        {
-            while (authenticator is IpAllowlistAuthenticator gate)
-            {
-                authenticator = gate.Inner;
-            }
-
-            return authenticator;
         }
 
         private static void Deny(WebhookResponse response, int statusCode, string body, string? challenge)

@@ -37,44 +37,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private const int ChunkSize = 16 * 1024;
 
         /// <summary>
-        /// Reads <paramref name="source"/> to its end, or to the cap.
-        /// </summary>
-        /// <param name="source">The body stream. Read forward-only; never assumed seekable.</param>
-        /// <param name="maxLength">The cap in bytes. Defaults to <see cref="DefaultMaxLength"/>.</param>
-        /// <param name="declaredLength">
-        /// The declared <c>Content-Length</c> when the request carried one. A hint, not a gate.
-        /// </param>
-        /// <returns>The outcome.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxLength"/> is negative.</exception>
-        public static BoundedBodyRead Read(Stream source, int maxLength = DefaultMaxLength, long? declaredLength = null)
-        {
-            using (MemoryStream? buffer = Start(source, maxLength, declaredLength))
-            {
-                if (buffer is null)
-                {
-                    return BoundedBodyRead.OverLimit();
-                }
-
-                byte[] chunk = new byte[ChunkSize];
-                int read;
-
-                while ((read = source.Read(chunk, 0, chunk.Length)) > 0)
-                {
-                    if (buffer.Length + read > maxLength)
-                    {
-                        return BoundedBodyRead.OverLimit();
-                    }
-
-                    buffer.Write(chunk, 0, read);
-                }
-
-                return BoundedBodyRead.Complete(buffer.ToArray());
-            }
-        }
-
-        /// <summary>
-        /// Reads <paramref name="source"/> to its end, or to the cap, asynchronously.
+        /// Reads <paramref name="source"/> to its end, or to the cap. Asynchronous only: the one
+        /// production consumer (the Acumatica handler pipeline) is async, and a second synchronous
+        /// copy of the cap-enforcement loop would be unused public API — the same defect as
+        /// unreachable validation.
         /// </summary>
         /// <param name="source">The body stream. Read forward-only; never assumed seekable.</param>
         /// <param name="maxLength">The cap in bytes. Defaults to <see cref="DefaultMaxLength"/>.</param>

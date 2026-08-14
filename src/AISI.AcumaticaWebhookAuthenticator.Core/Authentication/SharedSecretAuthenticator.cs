@@ -1,10 +1,8 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
 using System.Text;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
-using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
@@ -21,9 +19,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// header X with value Y". Prefer an HMAC scheme whenever the sender supports one.
     /// </para>
     /// <para>
-    /// Comparison happens inside <see cref="WebhookSecret.MatchesValue"/>: fixed-time per
-    /// candidate, both live secrets always evaluated, so rotation neither leaks which secret is
-    /// live nor drops traffic mid-overlap.
+    /// Comparison happens inside <see cref="WebhookSecret.MatchesValue"/> via
+    /// <see cref="CredentialVerifier"/>: fixed-time per candidate, both live secrets always
+    /// evaluated, so rotation neither leaks which secret is live nor drops traffic mid-overlap.
     /// </para>
     /// <para>
     /// Instances are immutable and safe to share across threads.
@@ -33,7 +31,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     {
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _secretHeader;
-        private readonly string? _prefix;
+        private readonly CredentialVerifier.TryDecode _decode;
 
         /// <summary>
         /// Creates an authenticator.
@@ -58,7 +56,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             _secretProvider = secretProvider ?? throw new ArgumentNullException(nameof(secretProvider));
             _secretHeader = secretHeader;
-            _prefix = prefix;
+            _decode = (string headerValue, out byte[] credential) =>
+            {
+                if (!CredentialVerifier.TryStripPrefix(headerValue, prefix, out string value))
+                {
+                    credential = Array.Empty<byte>();
+                    return false;
+                }
+
+                credential = Encoding.UTF8.GetBytes(value);
+                return true;
+            };
         }
 
         /// <inheritdoc/>
@@ -72,59 +80,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentNullException(nameof(context));
             }
 
-            if (!context.TryGetHeaderValues(_secretHeader, out IReadOnlyList<string> headerValues))
-            {
-                return AuthResult.Fail(AuthFailureCode.CredentialMissing);
-            }
-
-            WebhookSecret? secret = _secretProvider.GetSecret();
-            if (secret is null)
-            {
-                return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
-            }
-
-            bool matched = false;
-            bool anyWellFormed = false;
-
-            // Every value of a repeated header is evaluated, and evaluation does not stop at the
-            // first match — the same no-short-circuit discipline WebhookSecret applies across keys,
-            // applied across candidates.
-            foreach (string headerValue in headerValues)
-            {
-                if (!TryStripPrefix(headerValue, out string credential))
-                {
-                    continue;
-                }
-
-                anyWellFormed = true;
-                matched |= secret.MatchesValue(Encoding.UTF8.GetBytes(credential), context.ReceivedOn);
-            }
-
-            if (matched)
-            {
-                return AuthResult.Success();
-            }
-
-            return AuthResult.Fail(
-                anyWellFormed ? AuthFailureCode.CredentialMismatch : AuthFailureCode.CredentialMalformed);
-        }
-
-        private bool TryStripPrefix(string candidate, out string credential)
-        {
-            if (string.IsNullOrEmpty(_prefix))
-            {
-                credential = candidate;
-                return true;
-            }
-
-            if (!candidate.StartsWith(_prefix!, StringComparison.Ordinal))
-            {
-                credential = string.Empty;
-                return false;
-            }
-
-            credential = candidate.Substring(_prefix!.Length);
-            return true;
+            return CredentialVerifier.Authenticate(context, _secretProvider, _secretHeader, _decode);
         }
     }
 }

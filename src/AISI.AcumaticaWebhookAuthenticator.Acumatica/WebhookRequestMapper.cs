@@ -9,9 +9,11 @@ using PX.Api.Webhooks;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>
-    /// Builds a <see cref="WebhookAuthContext"/> from the platform's request object.
+    /// Builds a <see cref="WebhookAuthContext"/> from the platform's request object. Internal:
+    /// its one caller is <see cref="AuthenticatedWebhookHandlerBase"/>, and public API with no
+    /// consumer is the same defect as unreachable validation.
     /// </summary>
-    public static class WebhookRequestMapper
+    internal static class WebhookRequestMapper
     {
         /// <summary>
         /// Maps a request. The body must already have been read — by

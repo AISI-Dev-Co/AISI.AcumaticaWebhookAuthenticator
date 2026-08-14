@@ -199,6 +199,37 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
+        public void Challenge_IsForwardedFromTheInnerScheme()
+        {
+            // Wrapping a scheme must not silently drop its WWW-Authenticate challenge — the host
+            // discovers it through IChallengeSource, which the gate forwards.
+            var basic = new BasicAuthenticator(
+                new StaticSecretProvider(WebhookSecret.FromUtf8("a:b")), "gated");
+            var gate = new IpAllowlistAuthenticator(basic, Allowlist);
+
+            Assert.Equal(basic.Challenge, ((IChallengeSource)gate).Challenge);
+            Assert.Null(((IChallengeSource)new IpAllowlistAuthenticator(
+                new RecordingAuthenticator(AuthResult.Success()), Allowlist)).Challenge);
+        }
+
+        [Fact]
+        public void RequestPathDependency_IsForwardedFromTheInnerScheme()
+        {
+            // Wrapping must not hide a {path} dependency from a host that cannot supply one.
+            var pathBound = new HmacAuthenticator(
+                new Configuration.HmacAuthOptions(
+                    new StaticSecretProvider(WebhookSecret.FromUtf8("k")), "X-Sig")
+                {
+                    Template = Signing.SignedPayloadTemplate.Parse("{path}{body}"),
+                });
+            var gate = new IpAllowlistAuthenticator(pathBound, Allowlist);
+
+            Assert.True(((IRequestPathDependent)gate).RequiresRequestPath);
+            Assert.False(((IRequestPathDependent)new IpAllowlistAuthenticator(
+                new RecordingAuthenticator(AuthResult.Success()), Allowlist)).RequiresRequestPath);
+        }
+
+        [Fact]
         public void ZeroTrustedProxies_ThrowsAtConstruction()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new IpAllowlistAuthenticator(

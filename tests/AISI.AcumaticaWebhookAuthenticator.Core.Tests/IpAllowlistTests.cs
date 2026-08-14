@@ -135,6 +135,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Throws<ArgumentException>(() => IpAllowlist.Parse());
         }
 
+        [Theory]
+        [InlineData("203.0.113.9")]
+        [InlineData("203.0.113.0/24, 2001:db8::/32")]
+        [InlineData(" 203.0.113.0/24 ,, 2001:db8::/32 ")]
+        public void ParseCsv_AcceptsWhatTheScreenStores(string csv)
+        {
+            // The one tokenization both the maintenance screen and the request path use.
+            Assert.True(IpAllowlist.ParseCsv(csv).Contains(IPAddress.Parse("203.0.113.9")));
+        }
+
+        [Fact]
+        public void ParseCsv_WithOnlySeparators_ThrowsLikeAnEmptyList()
+        {
+            Assert.Throws<ArgumentException>(() => IpAllowlist.ParseCsv(","));
+        }
+
         [Fact]
         public void ToString_ReportsTheEntriesAsWritten()
         {

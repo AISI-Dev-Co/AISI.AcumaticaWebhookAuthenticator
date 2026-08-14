@@ -1,10 +1,7 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Text;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
-using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
@@ -16,10 +13,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// <para>
     /// The secret is the <em>whole</em> <c>user-id:password</c> credential, stored as one value —
     /// build it with <c>WebhookSecret.FromUtf8("svc-sender:hunter2")</c>. The decoded credential is
-    /// compared against it in one fixed-time operation. Not splitting at the colon is deliberate:
-    /// there is no username lookup step to time-attack, no user-enumeration distinction between
-    /// "unknown user" and "wrong password", and rotation (a new username, a new password, or both)
-    /// is just <see cref="WebhookSecret.WithRotatingUtf8"/> like every other scheme.
+    /// compared against it in one fixed-time operation via <see cref="CredentialVerifier"/>. Not
+    /// splitting at the colon is deliberate: there is no username lookup step to time-attack, no
+    /// user-enumeration distinction between "unknown user" and "wrong password", and rotation (a
+    /// new username, a new password, or both) is just <see cref="WebhookSecret.WithRotatingUtf8"/>
+    /// like every other scheme.
     /// </para>
     /// <para>
     /// Like the <c>SECRET</c> scheme, the credential is not bound to the request and is replayable
@@ -27,16 +25,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// better.
     /// </para>
     /// <para>
-    /// On a 401 the adapter should send <see cref="Challenge"/> as <c>WWW-Authenticate</c>; RFC
-    /// 7235 requires the challenge, and some senders will not retry without it.
+    /// On a 401 the host should send <see cref="Challenge"/> as <c>WWW-Authenticate</c> — it is
+    /// published through <see cref="IChallengeSource"/> so hosts need not know this concrete type;
+    /// RFC 7235 requires the challenge, and some senders will not retry without it.
     /// </para>
     /// <para>
     /// Instances are immutable and safe to share across threads.
     /// </para>
     /// </remarks>
-    public sealed class BasicAuthenticator : IWebhookAuthenticator
+    public sealed class BasicAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
         private const string SchemePrefix = "Basic ";
+
+        private static readonly CredentialVerifier.TryDecode Decode = TryDecodeCredential;
 
         private readonly IWebhookSecretProvider _secretProvider;
 
@@ -82,8 +83,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         public string Code => "BASIC";
 
         /// <summary>
-        /// The <c>WWW-Authenticate</c> value to send with a 401. Sending it is the adapter's job;
-        /// the core has no response object to set it on.
+        /// The <c>WWW-Authenticate</c> value to send with a 401. Sending it is the host's job; the
+        /// core has no response object to set it on.
         /// </summary>
         public string Challenge { get; }
 
@@ -95,38 +96,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentNullException(nameof(context));
             }
 
-            if (!context.TryGetHeaderValues("Authorization", out IReadOnlyList<string> headerValues))
-            {
-                return AuthResult.Fail(AuthFailureCode.CredentialMissing);
-            }
-
-            WebhookSecret? secret = _secretProvider.GetSecret();
-            if (secret is null)
-            {
-                return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
-            }
-
-            bool matched = false;
-            bool anyWellFormed = false;
-
-            foreach (string headerValue in headerValues)
-            {
-                if (!TryDecodeCredential(headerValue, out byte[] credential))
-                {
-                    continue;
-                }
-
-                anyWellFormed = true;
-                matched |= secret.MatchesValue(credential, context.ReceivedOn);
-            }
-
-            if (matched)
-            {
-                return AuthResult.Success();
-            }
-
-            return AuthResult.Fail(
-                anyWellFormed ? AuthFailureCode.CredentialMismatch : AuthFailureCode.CredentialMalformed);
+            return CredentialVerifier.Authenticate(context, _secretProvider, "Authorization", Decode);
         }
 
         private static bool TryDecodeCredential(string headerValue, out byte[] credential)
