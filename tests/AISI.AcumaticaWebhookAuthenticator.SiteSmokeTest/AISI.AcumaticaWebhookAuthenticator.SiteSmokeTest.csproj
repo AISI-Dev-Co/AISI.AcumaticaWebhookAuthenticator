@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Manual on-instance smoke-test handlers. Not shipped, not packed, not built in CI — this
+      compiles against a local site's Bin exactly like the adapter, gets dropped into that Bin,
+      and is exercised by POSTing real webhook requests at the site. Delete the registrations and
+      this DLL from the site when done.
+    -->
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest</AssemblyName>
+    <RootNamespace>AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AcumaticaBinPath Condition="'$(AcumaticaBinPath)' == ''">$(ACUMATICA_BIN)</AcumaticaBinPath>
+  </PropertyGroup>
+
+  <Target Name="EnsureAcumaticaBinPath" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(AcumaticaBinPath)' == ''"
+           Text="AcumaticaBinPath is not set. Point it at a local Acumatica site's Bin directory or set the ACUMATICA_BIN environment variable." />
+    <Error Condition="'$(AcumaticaBinPath)' != '' And !Exists('$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll')"
+           Text="'$(AcumaticaBinPath)' does not contain PX.Api.Webhooks.Abstractions.dll." />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AISI.AcumaticaWebhookAuthenticator.Acumatica\AISI.AcumaticaWebhookAuthenticator.Acumatica.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="PX.Api.Webhooks.Abstractions">
+      <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
