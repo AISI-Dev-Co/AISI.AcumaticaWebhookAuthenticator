@@ -55,6 +55,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// </remarks>
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
     {
+        #region Construction and state
         private readonly ConcurrentDictionary<Guid, RegistrationEntry> _registrations =
             new ConcurrentDictionary<Guid, RegistrationEntry>();
 
@@ -77,7 +78,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             _maxBodyLength = maxBodyLength;
         }
+        #endregion
 
+        #region Extension points
         /// <summary>
         /// Builds the authenticator for one webhook registration. Called once per registration, on
         /// its first request.
@@ -103,7 +106,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <param name="webhookId">The registration's <c>WebHook.WebHookID</c>.</param>
         protected virtual IWebhookSecretProvider CreateSecretProvider(Guid webhookId) =>
             new ErpSecretProvider(webhookId);
+        #endregion
 
+        #region IWebhookHandler
         /// <inheritdoc/>
         public async Task HandleAsync(WebhookContext context, CancellationToken cancellation)
         {
@@ -172,7 +177,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             await ProcessAsync(new AuthenticatedWebhookContext(context, read.Body), cancellation);
         }
+        #endregion
 
+        #region Internals
         private RegistrationEntry BuildRegistration(Guid webhookId)
         {
             IWebhookSecretProvider provider = CreateSecretProvider(webhookId);
@@ -225,5 +232,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 writer.Write(body);
             }
         }
+        #endregion
     }
 }

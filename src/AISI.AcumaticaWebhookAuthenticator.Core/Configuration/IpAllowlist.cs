@@ -20,6 +20,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </remarks>
     public sealed class IpAllowlist
     {
+        #region Construction and state
         private readonly IReadOnlyList<Entry> _entries;
         private readonly string _description;
 
@@ -28,7 +29,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             _entries = entries;
             _description = description;
         }
+        #endregion
 
+        #region Parsing
         /// <summary>
         /// Parses allowlist entries: bare addresses (<c>203.0.113.7</c>, <c>2001:db8::1</c>) and
         /// CIDR blocks (<c>203.0.113.0/24</c>, <c>2001:db8::/32</c>).
@@ -83,7 +86,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         private static readonly char[] CsvSeparators = { ',' };
+        #endregion
 
+        #region Matching
         /// <summary>
         /// Whether <paramref name="address"/> falls inside any entry.
         /// </summary>
@@ -115,7 +120,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
         /// <summary>The entries as written, for configuration screens and traces.</summary>
         public override string ToString() => _description;
+        #endregion
 
+        #region Internals
         private static Entry ParseEntry(string? entry)
         {
             if (string.IsNullOrWhiteSpace(entry))
@@ -230,5 +237,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 return true;
             }
         }
+        #endregion
     }
 }

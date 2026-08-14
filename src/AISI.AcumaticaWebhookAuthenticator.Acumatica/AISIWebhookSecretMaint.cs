@@ -17,6 +17,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         // The framework populates action and view members by reflection during graph
         // construction; the null-forgiving initialisers acknowledge that, they do not perform it.
 
+        #region Views and actions
         /// <summary>Standard Cancel.</summary>
         public PXCancel<AISIWebhookSecret> Cancel = null!;
 
@@ -25,7 +26,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         /// <summary>All webhook secrets.</summary>
         public SelectFrom<AISIWebhookSecret>.View Secrets = null!;
+        #endregion
 
+        #region Event handlers
         /// <summary>
         /// Rejects a secret the storage cannot hold — a silently truncated credential verifies
         /// nothing and gives no hint why.
@@ -98,7 +101,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     new PXSetPropertyException(e.Row, Messages.RotationExpiryNeedsSecret));
             }
         }
+        #endregion
 
+        #region Internals
         private static void RejectOverlongSecret(AISIWebhookSecret? row, object? newValue, string fieldLabel)
         {
             if (newValue is string text && text.Length > AISIWebhookSecret.SecretLength)
@@ -111,5 +116,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     text.Length);
             }
         }
+        #endregion
     }
 }

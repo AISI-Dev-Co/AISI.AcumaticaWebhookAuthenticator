@@ -31,6 +31,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class IpAllowlistAuthenticator : IWebhookAuthenticator, IChallengeSource, IRequestPathDependent
     {
+        #region Construction and state
         /// <summary>The conventional forwarded-address header, used when none is configured.</summary>
         public const string DefaultClientAddressHeader = "X-Forwarded-For";
 
@@ -74,7 +75,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _clientAddressHeader = clientAddressHeader;
             TrustedProxyDepth = trustedProxyDepth;
         }
+        #endregion
 
+        #region Properties and capabilities
         /// <summary>The authenticator that runs for allowed callers.</summary>
         public IWebhookAuthenticator Inner { get; }
 
@@ -92,7 +95,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         /// <summary>The inner scheme's answer, so wrapping never hides the dependency.</summary>
         public bool RequiresRequestPath => (Inner as IRequestPathDependent)?.RequiresRequestPath ?? false;
+        #endregion
 
+        #region Authentication
         /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {
@@ -118,7 +123,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             return Inner.Authenticate(context);
         }
+        #endregion
 
+        #region Internals
         private bool TryReadClientAddress(IReadOnlyList<string> headerValues, out IPAddress? address)
         {
             address = null;
@@ -184,5 +191,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             return false;
         }
+        #endregion
     }
 }

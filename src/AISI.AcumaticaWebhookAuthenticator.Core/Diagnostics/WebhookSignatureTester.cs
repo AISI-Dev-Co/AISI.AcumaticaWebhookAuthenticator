@@ -33,6 +33,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
     /// </remarks>
     public static class WebhookSignatureTester
     {
+        #region Testing
         /// <summary>
         /// Runs verification and reports the intermediate values.
         /// </summary>
@@ -123,7 +124,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 expected,
                 provided);
         }
+        #endregion
 
+        #region Internals
         private static void AppendExpected(
             List<string> expected,
             HmacAuthOptions options,
@@ -152,5 +155,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 }
             }
         }
+        #endregion
     }
 }

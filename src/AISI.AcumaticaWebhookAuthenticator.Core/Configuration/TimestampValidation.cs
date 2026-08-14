@@ -20,6 +20,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </remarks>
     public sealed class TimestampValidation
     {
+        #region Construction and state
         private readonly string? _headerName;
         private readonly SignatureExtraction? _signatureHeaderElement;
 
@@ -56,7 +57,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
         /// <summary>How far from the receipt time a request may be, in either direction.</summary>
         public TimeSpan Tolerance { get; }
+        #endregion
 
+        #region Factories
         /// <summary>
         /// The timestamp is carried in its own header.
         /// </summary>
@@ -108,7 +111,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return new TimestampValidation(null, element, format, tolerance);
         }
+        #endregion
 
+        #region Reading and validation
         /// <summary>
         /// Reads the raw timestamp text for this configuration.
         /// </summary>
@@ -163,7 +168,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return AuthResult.Success();
         }
+        #endregion
 
+        #region Internals
         private bool TryParse(string raw, out DateTimeOffset value)
         {
             value = default;
@@ -214,5 +221,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                     return false;
             }
         }
+        #endregion
     }
 }

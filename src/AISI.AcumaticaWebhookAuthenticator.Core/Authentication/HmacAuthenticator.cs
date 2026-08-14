@@ -28,6 +28,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class HmacAuthenticator : IWebhookAuthenticator, IRequestPathDependent
     {
+        #region Construction and state
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _signatureHeader;
         private readonly HmacAlgorithm _algorithm;
@@ -70,7 +71,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _template = options.Template;
             _timestamp = options.Timestamp;
         }
+        #endregion
 
+        #region Authentication
         /// <inheritdoc/>
         public string Code => _timestamp is null ? "HMAC" : "HMACTS";
 
@@ -139,7 +142,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 ? AuthResult.Success()
                 : _timestamp.Validate(timestampRaw, context.ReceivedOn);
         }
+        #endregion
 
+        #region Internals
         private AuthResult AuthenticatePerHeaderValue(
             WebhookAuthContext context,
             IReadOnlyList<string> headerValues,
@@ -233,6 +238,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 }
             }
         }
+        #endregion
 
     }
 }

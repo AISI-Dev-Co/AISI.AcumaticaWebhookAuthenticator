@@ -25,6 +25,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class BasicAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
+        #region Construction and state
         private const string SchemePrefix = "Basic ";
 
         private static readonly CredentialVerifier.TryDecode Decode = TryDecodeCredential;
@@ -59,7 +60,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _secretProvider = secretProvider ?? throw new ArgumentNullException(nameof(secretProvider));
             Challenge = "Basic realm=\"" + realm + "\", charset=\"UTF-8\"";
         }
+        #endregion
 
+        #region Authentication
         /// <inheritdoc/>
         public string Code => "BASIC";
 
@@ -76,7 +79,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             return CredentialVerifier.Authenticate(context, _secretProvider, "Authorization", Decode);
         }
+        #endregion
 
+        #region Internals
         private static bool TryDecodeCredential(string headerValue, out byte[] credential)
         {
             credential = Array.Empty<byte>();
@@ -106,5 +111,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return false;
             }
         }
+        #endregion
     }
 }

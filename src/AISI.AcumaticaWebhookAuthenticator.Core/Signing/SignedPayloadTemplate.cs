@@ -33,6 +33,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     /// </remarks>
     public sealed class SignedPayloadTemplate
     {
+        #region Construction and state
         private readonly IReadOnlyList<Segment> _segments;
 
         private SignedPayloadTemplate(string pattern, IReadOnlyList<Segment> segments)
@@ -52,7 +53,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 }
             }
         }
+        #endregion
 
+        #region Presets and properties
         /// <summary>The body alone. The most common convention; GitHub and Shopify both use it.</summary>
         public static SignedPayloadTemplate Body { get; } = Parse("{body}");
 
@@ -73,7 +76,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         /// should reject at construction rather than fail per request.
         /// </summary>
         public bool ReferencesPath { get; }
+        #endregion
 
+        #region Parsing
         /// <summary>
         /// Parses a template.
         /// </summary>
@@ -149,7 +154,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
             return new SignedPayloadTemplate(pattern, segments);
         }
+        #endregion
 
+        #region Resolution
         /// <summary>
         /// Resolves the template against a request.
         /// </summary>
@@ -214,7 +221,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 return TemplateResolution.Succeeded(buffer.ToArray(), preview?.ToString() ?? string.Empty);
             }
         }
+        #endregion
 
+        #region Internals
         private static bool TryResolveScalar(
             Segment segment,
             WebhookAuthContext context,
@@ -344,5 +353,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
             public static Segment ForKind(SegmentKind kind) => new Segment(kind, string.Empty);
         }
+        #endregion
     }
 }

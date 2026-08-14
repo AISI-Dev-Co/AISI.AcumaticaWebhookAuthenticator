@@ -38,6 +38,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class WebhookAuthContext
     {
+        #region Construction and state
         private static readonly IReadOnlyList<string> NoValues = Array.Empty<string>();
 
         private readonly Dictionary<string, IReadOnlyList<string>> _headers;
@@ -104,7 +105,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             : this(body, Widen(headers), method, path, receivedOn)
         {
         }
+        #endregion
 
+        #region Request data
         /// <summary>
         /// Raw request body bytes, exactly as received. This is the live array the caller supplied,
         /// not a copy; treat it as read-only.
@@ -122,7 +125,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         /// <summary>Request headers, matched case-insensitively.</summary>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers => _headers;
+        #endregion
 
+        #region Header lookup
         /// <summary>
         /// Looks up every value of a header, case-insensitively.
         /// </summary>
@@ -164,7 +169,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             value = values.Count == 1 ? values[0] : string.Join(",", values);
             return true;
         }
+        #endregion
 
+        #region Internals
         private static Dictionary<string, IReadOnlyList<string>> Widen(
             IReadOnlyDictionary<string, string> headers)
         {
@@ -217,5 +224,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             return cleaned;
         }
+        #endregion
     }
 }

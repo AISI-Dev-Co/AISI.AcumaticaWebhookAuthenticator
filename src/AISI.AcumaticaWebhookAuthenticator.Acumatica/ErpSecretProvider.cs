@@ -22,6 +22,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// </remarks>
     public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
+        #region Construction and state
         /// <summary>How long a read (including a miss) is reused before the database is consulted again.</summary>
         public static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
@@ -38,7 +39,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         {
             _webhookId = webhookId;
         }
+        #endregion
 
+        #region Secrets and policy
         /// <inheritdoc/>
         public WebhookSecret? GetSecret() => Current().Secret;
 
@@ -76,7 +79,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 entry.ClientAddressHeader,
                 entry.TrustedProxyDepth);
         }
+        #endregion
 
+        #region Cache and loading
         private CacheEntry Current()
         {
             while (true)
@@ -160,7 +165,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             return new CacheEntry(secret, allowlist, header, depth, allowlistBroken, fetchedOn);
         }
+        #endregion
 
+        #region Internals
         private sealed class CacheEntry
         {
             public CacheEntry(
@@ -202,5 +209,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public AuthResult Authenticate(WebhookAuthContext context) =>
                 AuthResult.Fail(Diagnostics.AuthFailureCode.Misconfigured);
         }
+        #endregion
     }
 }
