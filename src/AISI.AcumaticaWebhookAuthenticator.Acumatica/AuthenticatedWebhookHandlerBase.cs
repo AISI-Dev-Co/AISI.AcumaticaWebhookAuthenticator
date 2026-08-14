@@ -125,12 +125,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 ? erp.ApplyConfiguredAllowlist(registration.Authenticator)
                 : registration.Authenticator;
 
+            // No ConfigureAwait(false) anywhere in this method: Acumatica flows its own context
+            // (tenant, PXTrace scope) across awaits, and detaching from it would run everything
+            // after the first await - including the consumer's ProcessAsync - outside that
+            // context. Acuminator forbids it (PX1099/PX1120) for exactly this reason.
             BoundedBodyRead read = await BoundedBodyReader.ReadAsync(
-                    context.Request.Body,
-                    _maxBodyLength,
-                    context.Request.ContentLength,
-                    cancellation)
-                .ConfigureAwait(false);
+                context.Request.Body,
+                _maxBodyLength,
+                context.Request.ContentLength,
+                cancellation);
 
             if (!read.WithinLimit)
             {
@@ -170,8 +173,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 return;
             }
 
-            await ProcessAsync(new AuthenticatedWebhookContext(context, read.Body), cancellation)
-                .ConfigureAwait(false);
+            await ProcessAsync(new AuthenticatedWebhookContext(context, read.Body), cancellation);
         }
 
         private RegistrationEntry BuildRegistration(Guid webhookId)

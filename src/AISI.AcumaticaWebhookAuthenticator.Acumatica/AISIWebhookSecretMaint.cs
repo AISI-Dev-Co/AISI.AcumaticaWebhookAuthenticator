@@ -67,15 +67,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
             catch (FormatException failure)
             {
-                throw new PXSetPropertyException(e.Row, failure.Message);
+                throw new PXSetPropertyException(e.Row, Messages.AllowlistInvalid, failure.Message);
             }
             catch (ArgumentException)
             {
                 // Only separators, no entries: nothing would be allowed. Blank the field instead
                 // if no restriction is wanted.
-                throw new PXSetPropertyException(
-                    e.Row,
-                    "The allowlist contains no entries. Leave the field blank for no IP restriction.");
+                throw new PXSetPropertyException(e.Row, Messages.AllowlistEmpty);
             }
         }
 
@@ -98,9 +96,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 e.Cache.RaiseExceptionHandling<AISIWebhookSecret.rotatingExpiresOn>(
                     e.Row,
                     null,
-                    new PXSetPropertyException(
-                        e.Row,
-                        "A rotating secret requires an end date; without one the retired secret would be accepted forever."));
+                    new PXSetPropertyException(e.Row, Messages.RotatingSecretNeedsExpiry));
             }
 
             if (hasExpiry && !hasRotating)
@@ -108,9 +104,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 e.Cache.RaiseExceptionHandling<AISIWebhookSecret.rotatingSecret>(
                     e.Row,
                     null,
-                    new PXSetPropertyException(
-                        e.Row,
-                        "A rotation end date is set but there is no rotating secret to expire."));
+                    new PXSetPropertyException(e.Row, Messages.RotationExpiryNeedsSecret));
             }
         }
 
@@ -118,11 +112,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         {
             if (newValue is string text && text.Length > 255)
             {
-                throw new PXSetPropertyException(
-                    row,
-                    "{0} cannot exceed 255 characters; it is {1}. It was not saved — a truncated secret would never verify.",
-                    fieldLabel,
-                    text.Length);
+                throw new PXSetPropertyException(row, Messages.SecretTooLong, fieldLabel, text.Length);
             }
         }
     }

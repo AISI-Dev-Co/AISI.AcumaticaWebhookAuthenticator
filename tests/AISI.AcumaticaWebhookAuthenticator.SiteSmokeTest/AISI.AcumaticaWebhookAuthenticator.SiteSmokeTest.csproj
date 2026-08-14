@@ -26,6 +26,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Acuminator.Analyzers" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="PX.Api.Webhooks.Abstractions">
       <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>
       <Private>False</Private>

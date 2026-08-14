@@ -42,6 +42,20 @@
   </ItemGroup>
 
   <!--
+    Acumatica's own Roslyn analyzers, active on every build of this project. They only fire on
+    code that references PX.* - which is why they live here and in the smoke-test project, not in
+    the platform-agnostic core, where they would be configuration that looks live and is not.
+    With TreatWarningsAsErrors on, an Acuminator diagnostic fails the build - including the local
+    release build that produces the committed customization-package DLL.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Acuminator.Analyzers" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
     Every Acumatica reference carries <Private>False</Private> so no licensed assembly is copied
     into the output. Acumatica's own webhook sample omits this on its Abstractions reference; do
     not copy that mistake.
