@@ -10,26 +10,15 @@ using PX.Data;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>
-    /// Reads a webhook's authentication configuration from the ERP database — the
-    /// <see cref="AISIWebhookSecret"/> row keyed by the webhook registration, maintained on the
-    /// webhook secrets screen (AS301000): the secret, its rotation pair, and the optional IP
-    /// allowlist.
+    /// Reads a webhook's authentication configuration — secret, rotation pair, IP allowlist —
+    /// from its <see cref="AISIWebhookSecret"/> row, maintained on screen AS301000.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Rows are read through a <see cref="PXCache"/> with the crypt fields set decrypted, which is
-    /// what makes <c>[PXRSACryptString]</c> yield plaintext to the verifier while the database
-    /// holds ciphertext.
-    /// </para>
-    /// <para>
-    /// Reads are cached for <see cref="CacheDuration"/> in a store shared across instances, so a
-    /// per-request handler instance still amortises them. The cache is short enough that an
-    /// administrator's edit — a new secret, a changed allowlist — takes effect within a minute
-    /// without an application restart, and the negative result is cached too, so a flood of
-    /// requests against an unconfigured endpoint does not become a query per request. Entries are
-    /// <see cref="Lazy{T}"/> so an expiry under load refreshes with exactly one database read
-    /// instead of one per in-flight request. Thread-safe.
-    /// </para>
+    /// Rows are read through a <see cref="PXCache"/> with the crypt fields set decrypted. Reads
+    /// (misses included) are cached for <see cref="CacheDuration"/> in a store shared across
+    /// instances, so admin edits apply within a minute with no restart and unconfigured endpoints
+    /// cost no query per request; entries are <see cref="Lazy{T}"/> so an expiry under load
+    /// refreshes with one database read. Thread-safe.
     /// </remarks>
     public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
@@ -54,17 +43,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         public WebhookSecret? GetSecret() => Current().Secret;
 
         /// <summary>
-        /// Applies the row's IP allowlist, when the administrator configured one, around
-        /// <paramref name="inner"/>.
+        /// Applies the row's IP allowlist, when one is configured, around <paramref name="inner"/>;
+        /// substitutes a deny-everything authenticator when the stored configuration cannot be
+        /// applied.
         /// </summary>
         /// <param name="inner">The authenticator for this webhook.</param>
-        /// <returns>
-        /// <paramref name="inner"/> unchanged when no allowlist is configured; an
-        /// <see cref="IpAllowlistAuthenticator"/> over it when one is; a deny-everything
-        /// authenticator when the stored configuration cannot be applied. Called per request so an
-        /// edit takes effect on the cache cadence — which is exactly why the allowlist is not
-        /// baked into the authenticator at construction.
-        /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="inner"/> is null.</exception>
         public IWebhookAuthenticator Refine(IWebhookAuthenticator inner)
         {
@@ -77,9 +60,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (entry.AllowlistBroken)
             {
-                // The row carries an allowlist that cannot be applied (edited outside the screen's
-                // validation). The administrator asked for an IP restriction; the one thing this
-                // must not do is quietly not restrict.
+                // The administrator asked for an IP restriction; the one thing this must not do
+                // is quietly not restrict.
                 return DenyAllAuthenticator.Instance;
             }
 
@@ -107,8 +89,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     return entry;
                 }
 
-                // Swap the stale entry for a fresh Lazy; whichever thread wins the swap loads
-                // once, and every loser re-reads the winner's value on the next pass.
+                // Whichever thread wins the swap loads once; losers re-read the winner's value.
                 Cache.TryUpdate(_webhookId, CreateEntry(_webhookId), lazy);
             }
         }
@@ -161,8 +142,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!string.IsNullOrWhiteSpace(row.AllowedAddresses))
             {
-                // The screen validates on save, but the database can be edited past it. A stored
-                // allowlist that cannot be parsed fails closed rather than open.
+                // The database can be edited past the screen's validation; unparseable fails
+                // closed, not open.
                 try
                 {
                     allowlist = IpAllowlist.ParseCsv(row.AllowedAddresses!);
@@ -211,10 +192,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public DateTime FetchedOn { get; }
         }
 
-        /// <summary>
-        /// Denies every request. Substituted when a stored allowlist cannot be applied, because an
-        /// IP restriction the administrator asked for must not quietly stop restricting.
-        /// </summary>
+        /// <summary>Denies every request; substituted when a stored allowlist cannot be applied.</summary>
         private sealed class DenyAllAuthenticator : IWebhookAuthenticator
         {
             public static DenyAllAuthenticator Instance { get; } = new DenyAllAuthenticator();

@@ -69,10 +69,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         public bool ReferencesTimestamp { get; }
 
         /// <summary>
-        /// Whether the template includes a <c>{path}</c> token. A host that cannot supply a request
-        /// path — Acumatica's <c>WebhookRequest</c> has no path member — should reject such a
-        /// template when the handler is constructed, rather than let every request fail
-        /// <c>template_path_unavailable</c> at runtime.
+        /// Whether the template includes a <c>{path}</c> token, which a host with no request path
+        /// should reject at construction rather than fail per request.
         /// </summary>
         public bool ReferencesPath { get; }
 

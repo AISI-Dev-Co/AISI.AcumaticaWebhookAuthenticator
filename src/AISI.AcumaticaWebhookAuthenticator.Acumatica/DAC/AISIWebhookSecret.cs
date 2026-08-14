@@ -13,21 +13,14 @@ using WebHook = PX.Api.Webhooks.DAC.WebHook;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 {
     /// <summary>
-    /// The signing secret for one webhook registration, one row per <c>WebHook</c> row.
+    /// The signing secret and IP allowlist for one webhook registration, one row per
+    /// <c>WebHook</c> row.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Secrets are stored via <c>[PXRSACryptString]</c> — Acumatica's own pattern for third-party
-    /// integration credentials (the WooCommerce connector's <c>BCBindingWooCommerce</c> stores its
-    /// API secret the same way): encrypted at rest with the site certificate, editable by an
-    /// administrator without a redeployment, and working unchanged on SaaS where there is no file
-    /// system.
-    /// </para>
-    /// <para>
-    /// This table carries <em>only</em> secret material. The handler type lives in
-    /// <c>WebHook.Handler</c>, the scheme lives in the handler's code; duplicating either here
-    /// would create a second copy to drift.
-    /// </para>
+    /// Secrets use <c>[PXRSACryptString]</c>, Acumatica's own pattern for integration credentials:
+    /// encrypted at rest with the site certificate, admin-editable without redeployment, SaaS-safe.
+    /// The handler type stays in <c>WebHook.Handler</c> and the scheme in the handler's code —
+    /// duplicating either here would create a second copy to drift.
     /// </remarks>
     [Serializable]
     [PXCacheName("Webhook Secret")]
@@ -85,10 +78,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 
         #region AllowedAddresses
         /// <summary>
-        /// IP addresses and CIDR blocks the sender may call from, comma-separated
-        /// (<c>203.0.113.0/24, 2001:db8::/32</c>). Blank means no IP restriction. Not encrypted —
-        /// an allowlist is policy, not credential. Only meaningful behind a trusted front proxy
-        /// that controls <see cref="ClientAddressHeader"/>; see the library README.
+        /// Comma-separated addresses and CIDR blocks the sender may call from; blank means no IP
+        /// restriction. Not encrypted — policy, not credential. Only meaningful behind a trusted
+        /// front proxy that controls <see cref="ClientAddressHeader"/>.
         /// </summary>
         [PXDBString(500, IsUnicode = false)]
         [PXUIField(DisplayName = "Allowed IP Addresses")]
@@ -97,10 +89,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region ClientAddressHeader
-        /// <summary>
-        /// The header the trusted front proxy records the caller's address in. Used only when
-        /// <see cref="AllowedAddresses"/> is set.
-        /// </summary>
+        /// <summary>The header the trusted proxy records the caller's address in.</summary>
         [PXDBString(64, IsUnicode = false)]
         [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultClientAddressHeader, PersistingCheck = PXPersistingCheck.Nothing)]
         [PXUIField(DisplayName = "Client Address Header")]
@@ -110,8 +99,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 
         #region TrustedProxyDepth
         /// <summary>
-        /// How many trailing entries of the header were appended by trusted infrastructure; the
-        /// client address is read at exactly this depth from the right. 1 = one trusted proxy.
+        /// How many trailing header entries trusted infrastructure appended; the client address is
+        /// read at this depth from the right.
         /// </summary>
         [PXDBInt(MinValue = 1, MaxValue = 10)]
         [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultTrustedProxyDepth, PersistingCheck = PXPersistingCheck.Nothing)]

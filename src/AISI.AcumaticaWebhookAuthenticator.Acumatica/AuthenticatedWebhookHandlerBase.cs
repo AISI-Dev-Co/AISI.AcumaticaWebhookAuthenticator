@@ -94,7 +94,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// </summary>
         /// <param name="context">The platform context plus the verified body buffer.</param>
         /// <param name="cancellation">The cancellation token.</param>
-        /// <returns>A task.</returns>
         protected abstract Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation);
 
         /// <summary>
@@ -102,7 +101,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <see cref="ErpSecretProvider"/>; override to source them elsewhere.
         /// </summary>
         /// <param name="webhookId">The registration's <c>WebHook.WebHookID</c>.</param>
-        /// <returns>The provider.</returns>
         protected virtual IWebhookSecretProvider CreateSecretProvider(Guid webhookId) =>
             new ErpSecretProvider(webhookId);
 
@@ -114,12 +112,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 throw new ArgumentNullException(nameof(context));
             }
 
-            // The body is read before the authenticator is even resolved: an over-cap request is
-            // decided by the byte count alone, so it should not cost a secret-provider read.
-            // No ConfigureAwait(false) anywhere in this method: Acumatica flows its own context
-            // (tenant, PXTrace scope) across awaits, and detaching from it would run everything
-            // after the first await - including the consumer's ProcessAsync - outside that
-            // context. Acuminator forbids it (PX1099/PX1120) for exactly this reason.
+            // Body first: an over-cap request must not cost a secret-provider read. And no
+            // ConfigureAwait(false) anywhere here - Acumatica flows tenant/PXTrace context across
+            // awaits, and detaching would run ProcessAsync outside it (Acuminator PX1099/PX1120).
             BoundedBodyRead read = await BoundedBodyReader.ReadAsync(
                 context.Request.Body,
                 _maxBodyLength,
@@ -142,11 +137,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 context.Definition.Id,
                 BuildRegistration);
 
-            // Per-request policy (the ERP-configured allowlist) is applied by the provider, not
-            // baked in at construction, so an administrator's edit on the secrets screen takes
-            // effect on the provider's cache cadence instead of at the next application restart.
-            // Asked for as a capability rather than a concrete type, so replacing or decorating
-            // the provider cannot silently drop the restriction.
+            // Per-request policy (the ERP-configured allowlist) is the provider's, applied here so
+            // admin edits take effect on its cache cadence - asked for as a capability so a
+            // replaced or decorated provider cannot silently drop the restriction.
             IWebhookAuthenticator authenticator =
                 (registration.Provider as IAuthenticatorRefiner)?.Refine(registration.Authenticator)
                 ?? registration.Authenticator;
@@ -160,8 +153,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!result.Succeeded)
             {
-                // The code is diagnostic only. It goes to the trace and never to the sender: a 401
-                // that distinguishes "malformed" from "mismatched" is a decision oracle.
+                // The failure code goes to the trace and never to the sender: a 401 that
+                // distinguishes "malformed" from "mismatched" is a decision oracle.
                 PXTrace.WriteWarning(
                     "Webhook authentication failed: {0} (scheme {1}, webhook {2}, trace {3}).",
                     result.FailureCode,
@@ -189,10 +182,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 ?? throw new InvalidOperationException(
                     GetType().Name + ".CreateAuthenticator returned null.");
 
-            // The platform surfaces no request path, so a configuration that signs {path} could
-            // never verify a single request. Failing here, once, names the misconfiguration;
-            // failing per request would read as a sender problem. Decorators forward the
-            // capability, so wrapping cannot hide the dependency.
+            // The platform surfaces no request path, so a {path}-signing configuration could never
+            // verify a single request. Fail once, loudly, instead of per request as an apparent
+            // sender problem.
             if ((authenticator as IRequestPathDependent)?.RequiresRequestPath == true)
             {
                 throw new InvalidOperationException(

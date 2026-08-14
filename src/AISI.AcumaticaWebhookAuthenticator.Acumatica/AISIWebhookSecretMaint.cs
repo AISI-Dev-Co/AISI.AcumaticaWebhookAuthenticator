@@ -9,14 +9,9 @@ using PX.Data.BQL.Fluent;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>
-    /// Maintenance graph for webhook secrets — screen <c>AS301000</c>. One grid: webhook, secret,
-    /// and the optional rotation pair.
+    /// Maintenance graph for webhook secrets — screen <c>AS301000</c>. Stored secrets are never
+    /// displayed back; an administrator pastes a new value to replace one.
     /// </summary>
-    /// <remarks>
-    /// The screen never displays a stored secret back; <c>[PXRSACryptString]</c> masks it in the
-    /// UI. An administrator pastes a new value to replace one, which is the correct workflow for
-    /// credential fields.
-    /// </remarks>
     public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint>
     {
         // The framework populates action and view members by reflection during graph
@@ -32,9 +27,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         public SelectFrom<AISIWebhookSecret>.View Secrets = null!;
 
         /// <summary>
-        /// Rejects a secret the storage cannot hold. The DAC field is 255 characters and
-        /// <c>[PXRSACryptString]</c> would otherwise persist a silently truncated credential —
-        /// which verifies nothing, fails every request, and gives no hint why.
+        /// Rejects a secret the storage cannot hold — a silently truncated credential verifies
+        /// nothing and gives no hint why.
         /// </summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.secret> e)
         {
@@ -48,9 +42,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
 
         /// <summary>
-        /// Validates the allowlist with the same parser the request path uses, so what the screen
-        /// accepts is exactly what will run. A typo caught here is a red field; the same typo in
-        /// the database at request time denies every request until fixed.
+        /// Validates the allowlist with the same parser the request path uses — a typo caught here
+        /// is a red field; at request time it denies every request until fixed.
         /// </summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.allowedAddresses> e)
         {
@@ -76,8 +69,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
 
         /// <summary>
-        /// A rotating secret without an expiry would be accepted forever — rotation overlap is
-        /// supposed to close itself. Require the pair together.
+        /// Requires the rotating-secret/expiry pair together — an overlap is supposed to close
+        /// itself.
         /// </summary>
         protected virtual void _(Events.RowPersisting<AISIWebhookSecret> e)
         {

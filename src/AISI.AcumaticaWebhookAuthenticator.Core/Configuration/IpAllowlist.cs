@@ -12,22 +12,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// A set of IP addresses and CIDR blocks that senders are allowed to call from.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This type only answers "is this address in the set". Where the address comes from is the
-    /// harder problem — the platform exposes no remote address, so the only source is a forwarded
-    /// header, and a forwarded header is only evidence when a trusted proxy controls it. That
-    /// caveat lives on <see cref="Authentication.IpAllowlistAuthenticator"/>, which is the type
-    /// that reads one.
-    /// </para>
-    /// <para>
-    /// An IPv4-mapped IPv6 address (<c>::ffff:203.0.113.7</c>) matches IPv4 entries: dual-stack
-    /// front ends report IPv4 callers that way, and treating the two spellings as different
-    /// addresses would make an allowlist work or fail depending on the proxy's stack. Otherwise
-    /// families never cross-match.
-    /// </para>
-    /// <para>
-    /// Instances are immutable and safe to share across threads.
-    /// </para>
+    /// Only answers "is this address in the set"; where the address comes from — and why that is
+    /// the harder problem — lives on <see cref="Authentication.IpAllowlistAuthenticator"/>.
+    /// IPv4-mapped IPv6 (<c>::ffff:203.0.113.7</c>) matches IPv4 entries, because dual-stack front
+    /// ends report IPv4 callers that way; otherwise families never cross-match. Immutable and safe
+    /// to share across threads.
     /// </remarks>
     public sealed class IpAllowlist
     {
@@ -45,17 +34,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// CIDR blocks (<c>203.0.113.0/24</c>, <c>2001:db8::/32</c>).
         /// </summary>
         /// <param name="entries">The entries. At least one is required.</param>
-        /// <returns>The allowlist.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="entries"/> is empty. An empty allowlist denies every request; if that is
-        /// really the intent, it deserves to be written somewhere more legible than an empty list.
-        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="entries"/> is empty — an empty allowlist would deny every request.</exception>
         /// <exception cref="FormatException">
-        /// An entry is not an address or CIDR block. Parse time rather than request time, for the
-        /// same reason <see cref="Signing.SignedPayloadTemplate.Parse"/> throws: a bad entry is a
-        /// configuration error and should surface at construction, not as every request from the
-        /// mistyped network denying in production.
+        /// An entry is not an address or CIDR block. Thrown at parse time so a configuration error
+        /// surfaces at construction, not as every request denying in production.
         /// </exception>
         public static IpAllowlist Parse(params string[] entries)
         {
@@ -82,12 +65,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
-        /// Parses a comma-separated list of entries — the storage form configuration screens use.
-        /// The one tokenization both the editing screen and the request path call, so what the
-        /// screen accepts is what runs, by construction rather than by copy.
+        /// Parses a comma-separated list — the one tokenization both the editing screen and the
+        /// request path call, so what the screen accepts is what runs.
         /// </summary>
         /// <param name="entries">Comma-separated entries, e.g. <c>203.0.113.0/24, 2001:db8::/32</c>.</param>
-        /// <returns>The allowlist.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="entries"/> contains no entries.</exception>
         /// <exception cref="FormatException">An entry is not an address or CIDR block.</exception>
@@ -107,7 +88,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// Whether <paramref name="address"/> falls inside any entry.
         /// </summary>
         /// <param name="address">The address to test. Null is never contained.</param>
-        /// <returns><see langword="true"/> when the address is allowed.</returns>
         public bool Contains(IPAddress? address)
         {
             if (address is null)
@@ -123,9 +103,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             byte[] candidate = address.GetAddressBytes();
             bool contained = false;
 
-            // Every entry is evaluated. Nothing here is secret, but the habit of not
-            // short-circuiting over request-controlled comparisons is cheaper to keep than to
-            // reason about per call site.
+            // Not short-circuited: the discipline is cheaper to keep than to reason about per
+            // call site.
             foreach (Entry entry in _entries)
             {
                 contained |= entry.Matches(address.AddressFamily, candidate);
@@ -134,8 +113,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return contained;
         }
 
-        /// <summary>The entries as parsed, for configuration screens and traces.</summary>
-        /// <returns>The entry list, comma-separated.</returns>
+        /// <summary>The entries as written, for configuration screens and traces.</summary>
         public override string ToString() => _description;
 
         private static Entry ParseEntry(string? entry)
@@ -186,9 +164,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                         $"'{text}' has prefix length {effectivePrefix}; {address.AddressFamily} allows 0 to {maxPrefix}."));
             }
 
-            // Host bits beyond the prefix are zeroed so that 203.0.113.7/24 behaves as
-            // 203.0.113.0/24 — the conventional reading — instead of silently matching nothing
-            // past the first full byte.
+            // 203.0.113.7/24 behaves as 203.0.113.0/24 — the conventional reading.
             ZeroHostBits(network, effectivePrefix);
 
             return new Entry(address.AddressFamily, network, effectivePrefix);

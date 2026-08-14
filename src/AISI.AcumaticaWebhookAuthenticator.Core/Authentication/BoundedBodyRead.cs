@@ -19,9 +19,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         /// <summary>
         /// Whether the whole body fit inside the limit. When <see langword="false"/> the request
-        /// must be rejected; <see cref="Body"/> is empty and the bytes read so far are discarded,
-        /// because a truncated body is not a payload — verifying or deserialising it would process
-        /// data the sender never sent as a unit.
+        /// must be rejected and <see cref="Body"/> is empty — a truncated body is not a payload.
         /// </summary>
         public bool WithinLimit { get; }
 
@@ -29,12 +27,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         public byte[] Body => _body ?? Array.Empty<byte>();
 
         /// <summary>Creates a successful read.</summary>
-        /// <param name="body">The complete body.</param>
-        /// <returns>The result.</returns>
         public static BoundedBodyRead Complete(byte[] body) => new BoundedBodyRead(true, body);
 
         /// <summary>Creates an over-limit result.</summary>
-        /// <returns>The result.</returns>
         public static BoundedBodyRead OverLimit() => new BoundedBodyRead(false, null);
     }
 }

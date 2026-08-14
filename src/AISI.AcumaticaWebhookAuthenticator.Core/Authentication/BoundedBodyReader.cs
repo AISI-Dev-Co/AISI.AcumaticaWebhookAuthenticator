@@ -11,23 +11,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// Reads a request body into a byte array while enforcing a size cap.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The cap is enforced <em>while reading</em>, never by trusting a declared length. A
-    /// <c>Content-Length</c> header is absent under chunked transfer encoding and is
-    /// sender-controlled when present, so it serves here only as an initial capacity hint — and as
-    /// a fast rejection when it already exceeds the limit, which spares reading a body the request
-    /// is going to be denied over anyway.
-    /// </para>
-    /// <para>
-    /// The returned buffer is the one to hand to <see cref="WebhookAuthContext"/> and, after
-    /// authentication, to the payload deserialiser. Reading once and sharing the buffer is the
-    /// library's core contract: the bytes that were verified are the bytes that get processed.
-    /// </para>
-    /// <para>
-    /// Acumatica caps inbound webhook bodies at 1 MB, which is where
-    /// <see cref="DefaultMaxLength"/> comes from. A tighter per-endpoint cap is a refinement; a
-    /// looser one is ineffective behind that platform limit.
-    /// </para>
+    /// The cap is enforced <em>while reading</em>: <c>Content-Length</c> is absent under chunked
+    /// encoding and sender-controlled when present, so it serves only as a capacity hint and a
+    /// fast reject. The returned buffer is the one to verify against and deserialise from — read
+    /// once, share the buffer. <see cref="DefaultMaxLength"/> is the platform's own 1 MB cap.
     /// </remarks>
     public static class BoundedBodyReader
     {
@@ -36,19 +23,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private const int ChunkSize = 16 * 1024;
 
-        /// <summary>
-        /// Reads <paramref name="source"/> to its end, or to the cap. Asynchronous only: the one
-        /// production consumer (the Acumatica handler pipeline) is async, and a second synchronous
-        /// copy of the cap-enforcement loop would be unused public API — the same defect as
-        /// unreachable validation.
-        /// </summary>
+        /// <summary>Reads <paramref name="source"/> to its end, or to the cap.</summary>
         /// <param name="source">The body stream. Read forward-only; never assumed seekable.</param>
-        /// <param name="maxLength">The cap in bytes. Defaults to <see cref="DefaultMaxLength"/>.</param>
-        /// <param name="declaredLength">
-        /// The declared <c>Content-Length</c> when the request carried one. A hint, not a gate.
-        /// </param>
+        /// <param name="maxLength">The cap in bytes.</param>
+        /// <param name="declaredLength">The declared <c>Content-Length</c>, if any. A hint, not a gate.</param>
         /// <param name="cancellation">The cancellation token.</param>
-        /// <returns>The outcome.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxLength"/> is negative.</exception>
         public static async Task<BoundedBodyRead> ReadAsync(

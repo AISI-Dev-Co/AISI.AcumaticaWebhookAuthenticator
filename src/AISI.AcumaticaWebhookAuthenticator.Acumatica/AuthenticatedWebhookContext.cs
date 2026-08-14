@@ -8,14 +8,11 @@ using PX.Api.Webhooks;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>
-    /// What an authenticated handler gets to work with: the platform context plus the verified
-    /// body buffer.
+    /// The platform context plus the verified body buffer.
     /// </summary>
     /// <remarks>
-    /// <see cref="Body"/> is the buffer the signature was verified against. Deserialise from it and
-    /// nothing else — <c>Request.Body</c> has already been consumed and
-    /// <c>Request.CreateTextReader()</c> would read from that spent stream. The buffer is shared,
-    /// not copied; do not mutate it.
+    /// Deserialise from <see cref="Body"/> and nothing else — <c>Request.Body</c> is a spent
+    /// stream. The buffer is shared, not copied; do not mutate it.
     /// </remarks>
     public sealed class AuthenticatedWebhookContext
     {
@@ -43,10 +40,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         public byte[] Body { get; }
 
         /// <summary>
-        /// Decodes <see cref="Body"/> as text using the request's declared charset, falling back to
-        /// UTF-8 — the same fallback the platform's own <c>CreateTextReader</c> applies.
+        /// Decodes <see cref="Body"/> using the request's declared charset, falling back to UTF-8
+        /// like the platform's own <c>CreateTextReader</c>.
         /// </summary>
-        /// <returns>The body as text.</returns>
         public string GetBodyText()
         {
             Encoding encoding = Encoding.UTF8;
