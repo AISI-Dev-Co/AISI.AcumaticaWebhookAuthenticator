@@ -1,0 +1,112 @@
+name: Release
+
+# Builds the two release artifacts:
+#   1. AISI.AcumaticaWebhookAuthenticator.Core.<version>.nupkg - the NuGet package
+#   2. AISI.WebhookAuthenticator.zip - the importable Acumatica customization package,
+#      assembled from customization/AISI.WebhookAuthenticator (project.xml + payload)
+#
+# The Acumatica adapter DLL inside the zip is the binary committed under
+# customization/AISI.WebhookAuthenticator/Bin: it references licensed PX.* assemblies from a site
+# Bin, which cannot exist on a runner, so CI cannot compile it. The version gate below stops a
+# stale committed binary from shipping. The Core DLL is built fresh here.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$VERSION" ]]; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} does not match Directory.Build.props version $VERSION"
+            exit 1
+          fi
+
+      - name: Build and test Core
+        run: |
+          dotnet restore tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests
+          dotnet build tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-restore --configuration Release
+          dotnet test tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-build --configuration Release
+
+      - name: Pack NuGet package
+        run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts
+
+      # The committed adapter binary must be the one this version's source produced. A mismatch
+      # means someone bumped the version or changed the adapter without refreshing the binary -
+      # see customization/AISI.WebhookAuthenticator/README.md for the refresh step.
+      - name: Assert the committed adapter DLL matches the version
+        shell: pwsh
+        run: |
+          $expected = '${{ steps.version.outputs.version }}.0'
+          $dll = 'customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll'
+          $actual = [System.Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString()
+          if ($actual -ne $expected) {
+            Write-Host "::error::$dll is version $actual but Directory.Build.props says $expected. Rebuild it against a 2025 R2 site Bin and re-commit."
+            exit 1
+          }
+          Write-Host "Adapter DLL version $actual matches."
+
+      # Layout verified against a real Customization Project Editor export: project.xml at the
+      # root, every file payload at its app-relative path.
+      - name: Assemble customization package
+        run: |
+          set -euo pipefail
+          STAGE=$(mktemp -d)
+          cp customization/AISI.WebhookAuthenticator/project.xml "$STAGE/"
+          mkdir -p "$STAGE/Bin" "$STAGE/screens/AS/AS301000"
+          cp src/AISI.AcumaticaWebhookAuthenticator.Core/bin/Release/netstandard2.0/AISI.AcumaticaWebhookAuthenticator.Core.dll "$STAGE/Bin/"
+          cp customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll "$STAGE/Bin/"
+          cp screens/AS/AS301000/AS301000.ts screens/AS/AS301000/AS301000.html "$STAGE/screens/AS/AS301000/"
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/artifacts/AISI.WebhookAuthenticator.zip" .)
+          unzip -l artifacts/AISI.WebhookAuthenticator.zip
+
+      # Acumatica assemblies are licensed and must never be redistributed; assert against every
+      # artifact, the customization zip included.
+      - name: Assert no Acumatica assemblies in any artifact
+        run: |
+          set -euo pipefail
+          for pkg in ./artifacts/*.nupkg ./artifacts/*.zip; do
+            echo "Inspecting $pkg"
+            if unzip -l "$pkg" | grep -Ei 'PX\..*\.dll'; then
+              echo "::error::$pkg contains an Acumatica assembly"
+              exit 1
+            fi
+          done
+          echo "No Acumatica assemblies found."
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            artifacts/*.nupkg
+            artifacts/AISI.WebhookAuthenticator.zip
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            artifacts/*.nupkg \
+            artifacts/AISI.WebhookAuthenticator.zip \
+            --title "${GITHUB_REF#refs/tags/}" \
+            --generate-notes

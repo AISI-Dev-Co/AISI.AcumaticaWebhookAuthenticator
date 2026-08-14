@@ -30,6 +30,12 @@ keyed by the webhook registration and maintained on its own screen.
 
 ## Install
 
+Tagged releases (`v*`) build two artifacts via the Release workflow: the
+`AISI.AcumaticaWebhookAuthenticator.Core` NuGet package, and the importable customization package
+`AISI.WebhookAuthenticator.zip` (screen, table schema, site map, access rights, both assemblies) —
+assembled from [customization/AISI.WebhookAuthenticator](customization/AISI.WebhookAuthenticator),
+never committed as a zip.
+
 Not yet published to nuget.org. Build from source:
 
 ```sh
