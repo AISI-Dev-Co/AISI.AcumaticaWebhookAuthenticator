@@ -217,6 +217,9 @@ both supported versions — the receipts are in [docs/framework-notes.md](docs/f
 
 - JWT scheme (the real work is `Microsoft.IdentityModel.*` binding redirects against a site's
   `Bin`, not the token logic)
+- Retries — redelivery handling for payloads whose processing failed after authenticating
+- Full payload capture to Acumatica's webhook request record, so the platform's built-in request
+  log carries the complete verified body
 - nuget.org publication
 
 ## Contributing
