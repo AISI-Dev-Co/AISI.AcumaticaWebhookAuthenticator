@@ -25,6 +25,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </remarks>
     public sealed class WebhookSecret
     {
+        #region Construction and state
         private readonly byte[] _current;
         private readonly byte[]? _rotating;
         private readonly DateTimeOffset? _rotatingExpiresOn;
@@ -35,7 +36,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             _rotating = rotating;
             _rotatingExpiresOn = rotatingExpiresOn;
         }
+        #endregion
 
+        #region Creation
         /// <summary>
         /// Creates a secret from raw key bytes. The array is copied, so later mutation by the caller
         /// cannot change what this secret verifies against.
@@ -101,7 +104,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return new WebhookSecret(bytes, null, null);
         }
+        #endregion
 
+        #region Rotation
         /// <summary>
         /// Returns a copy of this secret with a rotating counterpart valid until an expiry.
         /// </summary>
@@ -138,7 +143,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return new WebhookSecret(_current, Encoding.UTF8.GetBytes(rotating), expiresOn);
         }
+        #endregion
 
+        #region Verification
         /// <summary>
         /// Whether <paramref name="providedDigest"/> is a valid signature of
         /// <paramref name="message"/> under any secret live at <paramref name="asOf"/>.
@@ -205,6 +212,32 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>
+        /// Whether <paramref name="provided"/> is byte-for-byte equal to any secret live at
+        /// <paramref name="asOf"/> — direct credential comparison, no hashing, for the schemes
+        /// where the caller presents the secret itself (<c>SECRET</c>, <c>BASIC</c>).
+        /// </summary>
+        /// <param name="provided">The credential supplied on the request. Null never matches.</param>
+        /// <param name="asOf">The instant to evaluate the rotation window against.</param>
+        /// <remarks>
+        /// Fixed-time per candidate and not short-circuited across the current and rotating
+        /// secrets, for the same reason as <see cref="MatchesAny"/>. Per the
+        /// <see cref="Signing.FixedTimeComparer"/> contract, lengths are not secret.
+        /// </remarks>
+        public bool MatchesValue(byte[]? provided, DateTimeOffset asOf)
+        {
+            bool matched = false;
+
+            foreach (byte[] key in LiveKeys(asOf))
+            {
+                matched |= FixedTimeComparer.AreEqual(key, provided);
+            }
+
+            return matched;
+        }
+        #endregion
+
+        #region Diagnostics
+        /// <summary>
         /// Computes the digests this secret would produce, for display by
         /// <see cref="Diagnostics.WebhookSignatureTester"/>.
         /// </summary>
@@ -237,7 +270,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return digests;
         }
+        #endregion
 
+        #region Internals
         private static byte[] Copy(byte[] source)
         {
             var copy = new byte[source.Length];
@@ -254,5 +289,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 yield return _rotating;
             }
         }
+        #endregion
     }
 }

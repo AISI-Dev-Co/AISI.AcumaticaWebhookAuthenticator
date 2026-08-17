@@ -61,11 +61,57 @@ public abstract class WebhookRequest
 falls back to UTF-8 — confirming that the decoded-text path is charset-dependent, and that reading
 `Body` directly is the only way to obtain the bytes a sender actually signed.
 
-On the response side, `context.Response.StatusCode` is an `int` assigned from
-`Microsoft.AspNetCore.Http.StatusCodes`, `CreateTextWriter()` returns a `TextWriter` for the body,
-and **response headers can be set**.
-
 Acumatica caps inbound webhook bodies at **1 MB**.
+
+### `WebhookResponse`, `WebhookContext`, `WebhookDefinition`
+
+Decompiled 2026-08-13 from a local site's `Bin\PX.Api.Webhooks.Abstractions.dll` at **26.100.0175**
+(2026 R1) and confirmed member-for-member identical at **25.201.0213** (2025 R2) — both ends of the
+support matrix. Complete public surface, nothing elided:
+
+```csharp
+namespace PX.Api.Webhooks;
+
+public abstract class WebhookResponse
+{
+    public virtual int StatusCode { get; set; }
+    public virtual IDictionary<string, StringValues> Headers { get; }   // mutable dictionary
+    public virtual long? ContentLength { get; set; }
+    public virtual string ContentType { get; set; }
+    public virtual Stream Body { get; }
+
+    public TextWriter CreateTextWriter(string mediaType = "application/json");
+    public TextWriter CreateTextWriter(string mediaType, Encoding encoding);
+    protected virtual TextWriter CreateTextWriterCore(Encoding encoding);
+}
+
+public abstract class WebhookContext
+{
+    public virtual WebhookDefinition Definition { get; }
+    public virtual WebhookRequest Request { get; }
+    public virtual WebhookResponse Response { get; }
+    public virtual string TraceIdentifier { get; }   // matches HttpContext's identifier when set
+}
+
+public abstract class WebhookDefinition
+{
+    public virtual Guid Id { get; }   // same value as PX.Api.Webhooks.DAC.WebHook.WebHookID
+}
+```
+
+What that settles for the adapter's response side:
+
+- **Headers are a mutable `IDictionary<string, StringValues>`** — set them by assignment. The
+  head-ordering obligation stands: everything before the first body write.
+- **`CreateTextWriter(mediaType, encoding)` sets `ContentType` itself** (media type plus `charset`
+  via `MediaTypeHeaderValue`). Do not assign `ContentType` separately around a `CreateTextWriter`
+  call — last writer wins and they will fight.
+- **`StatusCode` is a bare `int`** with no default worth trusting; assign it explicitly on every
+  path.
+- **`WebhookDefinition.Id` is `WebHook.WebHookID`** — the natural key for per-webhook secret
+  lookup, handed to the handler on every invocation. The DAC-backed secret provider keys on it.
+- **`WebhookContext.TraceIdentifier`** exists for correlating adapter traces with the platform's
+  request log.
 
 ### What that settles
 
@@ -79,8 +125,8 @@ Acumatica caps inbound webhook bodies at **1 MB**.
 - **`Method` exists**, so the `{method}` template token is supported.
 - **`ContentType` and `ContentLength` exist**, which the adapter will want for content-type guards
   and for rejecting oversized bodies before reading them.
-- **Response headers are settable**, so `WWW-Authenticate` on a 401 is available to the `BASIC`
-  scheme when it lands.
+- **Response headers are settable** (see the `WebhookResponse` surface below), so
+  `WWW-Authenticate` on a 401 is available to the `BASIC` scheme when it lands.
 - **The 1 MB cap is enforced by the platform**, so a per-endpoint body-size limit is a refinement
   rather than a necessity, and no `web.config` work is required for a baseline.
 - **`Query` exists** and was not anticipated. A `{query:name}` template token is now feasible for
@@ -160,25 +206,34 @@ Two consequences:
 `CryptographicOperations.FixedTimeEquals` is unavailable: it arrived in .NET Standard 2.1 and net48
 implements 2.0. `Signing/FixedTimeComparer.cs` supplies the equivalent.
 
+### There is no remote address
+
+Neither `WebhookRequest` nor `WebhookContext` exposes the caller's IP address. An IP allowlist —
+on the backlog since the original spec — cannot be implemented from the platform surface. The only
+route is a proxy-supplied header such as `X-Forwarded-For`, which the sender controls unless a
+trusted proxy overwrites or appends to it; an allowlist built on it is authentication theatre
+unless the deployment guarantees that.
+
+**Maintainer decision (2026-08-13): ship it on the forwarded header, documented as requiring a
+trusted front proxy.** `IpAllowlistAuthenticator` implements it: the client address is read at
+`trustedProxyDepth` from the *right* of the flattened header (the left is the sender's to invent),
+ports and brackets are stripped, and anything missing, short or unparseable fails closed. It
+decorates another authenticator rather than replacing one — restriction, not authentication — and
+the adapter unwraps it when vetting templates and finding the BASIC challenge.
+
 ## Open
 
-Nothing on `WebhookRequest`. The remaining unknown is the `WebhookResponse` surface, which the
-adapter needs in order to set a status code, write a body and add headers. Response headers are
-confirmed settable; the exact member shapes have not been read.
+Nothing. Every type in `PX.Api.Webhooks.Abstractions` has now been read in full — `WebhookRequest`,
+`WebhookResponse`, `WebhookContext`, `WebhookDefinition`, `IWebhookHandler` — at both ends of the
+support matrix.
 
 ## How this was established
 
-`PX.Api.Webhooks.Abstractions.dll` (Version 1.0.0.0) was decompiled and the result supplied by the
-maintainer.
+`WebhookRequest` was decompiled from `PX.Api.Webhooks.Abstractions.dll` (Version 1.0.0.0) and the
+result supplied by the maintainer, because the original working session ran in a cloud container
+with no Acumatica installation, no `PX.*` packages on nuget.org, and no egress to Acumatica's
+sites.
 
-It could not be decompiled here. This repository is built in a cloud container with no Acumatica
-installation, so there is no site `Bin` to read from; Acumatica publishes no `PX.*` packages to
-nuget.org (`px.api.webhooks.abstractions`, `px.data`, `px.common` and `px.api` all return
-`BlobNotFound`); and `help.acumatica.com`, `community.acumatica.com` and `www.acumatica.com` are
-blocked by the container's egress policy. Decompilation needs the binary, and there was no route to
-one.
-
-The lesson for the next unknown is to ask for the artefact directly rather than record the question
-and work around it. Everything in the Verified section above that predates this note came from the
-public examples repository, which was the best available substitute and was materially less
-complete.
+The remaining types were decompiled directly on 2026-08-13 with `ilspycmd` against local site
+installs: `C:\Warranty Claim\WarrantyClaim\Bin` (26.100.0175, 2026 R1) and `C:\bpw\BPW_25_2\Bin`
+(25.201.0213, 2025 R2). The two versions' surfaces are identical.

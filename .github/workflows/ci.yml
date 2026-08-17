@@ -15,14 +15,19 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # The Core and test projects are built by name rather than through the solution: the
+      # solution also contains the Acumatica adapter, which references licensed PX.* assemblies
+      # from a site's Bin and cannot compile here — Acumatica publishes no PX.* packages. The
+      # adapter fails loudly (not silently no-ops) when AcumaticaBinPath is missing, so including
+      # it would fail every run; it is verified locally against a real site instead.
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal
+        run: dotnet test tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-build --configuration Release --verbosity normal
 
       - name: Pack
         run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts

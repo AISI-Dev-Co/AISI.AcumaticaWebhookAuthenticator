@@ -20,4 +20,35 @@
     <AnalysisLevel>latest-minimum</AnalysisLevel>
   </PropertyGroup>
 
+  <!--
+    Shared plumbing for projects that reference licensed PX.* assemblies from a site Bin, opted
+    into with <RequiresAcumaticaBin>true</RequiresAcumaticaBin>. AcumaticaBinPath comes from the
+    command line or the ACUMATICA_BIN environment variable - deliberately no default, so the build
+    never silently picks whatever site happens to be installed.
+  -->
+  <PropertyGroup Condition="'$(RequiresAcumaticaBin)' == 'true' And '$(AcumaticaBinPath)' == ''">
+    <AcumaticaBinPath>$(ACUMATICA_BIN)</AcumaticaBinPath>
+  </PropertyGroup>
+
+  <!-- A loud, early failure rather than a pile of CS0246s; these projects must never silently no-op. -->
+  <Target Name="EnsureAcumaticaBinPath"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(RequiresAcumaticaBin)' == 'true'">
+    <Error Condition="'$(AcumaticaBinPath)' == ''"
+           Text="AcumaticaBinPath is not set. Point it at a local Acumatica site's Bin directory, e.g. dotnet build -p:AcumaticaBinPath=&quot;C:\AcumaticaSites\MySite\Bin&quot;, or set the ACUMATICA_BIN environment variable." />
+    <Error Condition="'$(AcumaticaBinPath)' != '' And !Exists('$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll')"
+           Text="'$(AcumaticaBinPath)' does not contain PX.Api.Webhooks.Abstractions.dll. AcumaticaBinPath must point at an Acumatica 2025 R2+ site's Bin directory." />
+  </Target>
+
+  <!--
+    Acuminator fires only on PX-referencing code (on the core it would be configuration that looks
+    live and is not); with TreatWarningsAsErrors on, its diagnostics fail the build.
+  -->
+  <ItemGroup Condition="'$(RequiresAcumaticaBin)' == 'true'">
+    <PackageReference Include="Acuminator.Analyzers" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
 </Project>

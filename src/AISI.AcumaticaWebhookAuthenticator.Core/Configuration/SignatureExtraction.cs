@@ -24,6 +24,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </remarks>
     public sealed class SignatureExtraction
     {
+        #region Construction and state
         private readonly string? _elementKey;
         private readonly char _pairSeparator;
         private readonly char _keyValueSeparator;
@@ -34,7 +35,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             _pairSeparator = pairSeparator;
             _keyValueSeparator = keyValueSeparator;
         }
+        #endregion
 
+        #region Factories
         /// <summary>The whole header value is the signature. The common case.</summary>
         public static SignatureExtraction Whole { get; } = new SignatureExtraction(null, ',', '=');
 
@@ -58,7 +61,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return new SignatureExtraction(elementKey, pairSeparator, keyValueSeparator);
         }
+        #endregion
 
+        #region Extraction
         /// <summary>
         /// Pulls candidate signature values out of every value of a repeated header.
         /// </summary>
@@ -144,5 +149,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return matches;
         }
+        #endregion
     }
 }

@@ -16,6 +16,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     /// </remarks>
     public static class SignatureCodec
     {
+        #region Encoding and decoding
         /// <summary>
         /// Renders a digest in the given wire encoding.
         /// </summary>
@@ -49,7 +50,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     throw new ArgumentOutOfRangeException(nameof(encoding), encoding, "Unknown signature encoding.");
             }
         }
-
         /// <summary>
         /// Attempts to decode a signature from its wire encoding.
         /// </summary>
@@ -82,7 +82,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     return false;
             }
         }
+        #endregion
 
+        #region Internals
         private static bool TryDecodeBase64(string value, out byte[] digest)
         {
             digest = Array.Empty<byte>();
@@ -147,5 +149,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
             value = 0;
             return false;
         }
+        #endregion
     }
 }

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Manual on-instance smoke-test handlers. Not shipped, not packed, not built in CI — this
+      compiles against a local site's Bin exactly like the adapter (RequiresAcumaticaBin brings in
+      the shared Bin-path guard and Acuminator from Directory.Build.props), gets dropped into that
+      Bin, and is exercised by POSTing real webhook requests at the site. Delete the registrations
+      and this DLL from the site when done.
+    -->
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest</AssemblyName>
+    <RootNamespace>AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <RequiresAcumaticaBin>true</RequiresAcumaticaBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AISI.AcumaticaWebhookAuthenticator.Acumatica\AISI.AcumaticaWebhookAuthenticator.Acumatica.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="PX.Api.Webhooks.Abstractions">
+      <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

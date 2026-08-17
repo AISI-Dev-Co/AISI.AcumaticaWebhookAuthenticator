@@ -11,13 +11,14 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AB5F6CD5
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISI.AcumaticaWebhookAuthenticator.Core.Tests", "tests\AISI.AcumaticaWebhookAuthenticator.Core.Tests\AISI.AcumaticaWebhookAuthenticator.Core.Tests.csproj", "{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISI.AcumaticaWebhookAuthenticator.Acumatica", "src\AISI.AcumaticaWebhookAuthenticator.Acumatica\AISI.AcumaticaWebhookAuthenticator.Acumatica.csproj", "{C3A06A2D-8C88-4331-A19E-27C5937484EE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest", "tests\AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest\AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest.csproj", "{0A62EC52-6E84-41A7-8FD1-14C463498748}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -28,9 +29,22 @@ Global
 		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3A06A2D-8C88-4331-A19E-27C5937484EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3A06A2D-8C88-4331-A19E-27C5937484EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3A06A2D-8C88-4331-A19E-27C5937484EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3A06A2D-8C88-4331-A19E-27C5937484EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A62EC52-6E84-41A7-8FD1-14C463498748}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A62EC52-6E84-41A7-8FD1-14C463498748}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A62EC52-6E84-41A7-8FD1-14C463498748}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A62EC52-6E84-41A7-8FD1-14C463498748}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7B7C3996-FD5D-4C2B-966E-1A441BC7CF00} = {00113406-32D6-4434-9EA2-E94C22488A25}
 		{2E5C8246-C089-4BE2-839C-B5CCD6AB4C09} = {AB5F6CD5-B243-4E12-A0E1-0681339CF862}
+		{C3A06A2D-8C88-4331-A19E-27C5937484EE} = {00113406-32D6-4434-9EA2-E94C22488A25}
+		{0A62EC52-6E84-41A7-8FD1-14C463498748} = {AB5F6CD5-B243-4E12-A0E1-0681339CF862}
 	EndGlobalSection
 EndGlobal

@@ -1,0 +1,211 @@
+<Customization level="" description="Webhook authentication: secrets screen, DAC-backed secret storage, IP allowlists" product-version="25.200">
+  <File AppRelativePath="Bin\AISI.AcumaticaWebhookAuthenticator.Acumatica.dll" FileID="2b511cf8-58d3-46a2-958d-1d0d5453ec7d" />
+  <File AppRelativePath="Bin\AISI.AcumaticaWebhookAuthenticator.Core.dll" FileID="c968a5ee-a7c2-4249-8762-7d0a74d6a969" />
+  <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.html" ScreenId="AS301000" FileID="3009409d-b2e9-48ef-9445-5fc3c895a295" />
+  <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.ts" ScreenId="AS301000" FileID="4d889521-5f56-4355-9c13-2570d3f1cf60" />
+  <ScreenWithRights AccessRightsMergeRule="CopyFromTenant" HasAllRoles="True">
+  	<data-set>
+  		<relations format-version="4" relations-version="20250701" main-table="SiteMap">
+  			<link from="RolesInCache (ScreenID)" to="SiteMap (ScreenID)" />
+  			<link from="RolesInGraph (ScreenID)" to="SiteMap (ScreenID)" />
+  			<link from="RolesInMember (ScreenID)" to="SiteMap (ScreenID)" />
+  			<link from="Roles (Rolename, ApplicationName)" to="RolesInCache (Rolename, ApplicationName)" type="FromMaster" updateable="False" />
+  			<link from="Roles (Rolename, ApplicationName)" to="RolesInGraph (Rolename, ApplicationName)" type="FromMaster" updateable="False" />
+  			<link from="Roles (Rolename, ApplicationName)" to="RolesInMember (Rolename, ApplicationName)" type="FromMaster" updateable="False" />
+  		</relations>
+  		<layout>
+  			<table name="SiteMap">
+  				<table name="RolesInCache" uplink="(ScreenID) = (ScreenID)" />
+  				<table name="RolesInGraph" uplink="(ScreenID) = (ScreenID)" />
+  				<table name="RolesInMember" uplink="(ScreenID) = (ScreenID)" />
+  			</table>
+  			<table name="Roles" />
+  		</layout>
+  		<data>
+  			<SiteMap>
+  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/WarrantyClaim/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000">
+  					<RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
+  					<RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
+  				</row>
+  			</SiteMap>
+  			<Roles AllRoles="1">
+  				<row Rolename="AcumaticaSupport" ApplicationName="/" Descr="Role for Acumatica Support. Access similar to Administrator except for User Management, Security Settings and Access Management." Guest="0" />
+  				<row Rolename="Administrator" ApplicationName="/" Descr="System Administrator" Guest="0" />
+  				<row Rolename="AI Assistant User" ApplicationName="/" Descr="A user that can access the AI Assistant Service" Guest="0" />
+  				<row Rolename="Anonymous" ApplicationName="/" Descr="Anonymous" Guest="1" />
+  				<row Rolename="AP Admin" ApplicationName="/" Descr="Access to AP functions and settings" Guest="0" />
+  				<row Rolename="AP Clerk" ApplicationName="/" Descr="Access to AP functions" Guest="0" />
+  				<row Rolename="AP Viewer" ApplicationName="/" Descr="Read-only access to AP functions" Guest="0" />
+  				<row Rolename="AR Admin" ApplicationName="/" Descr="Access to AR functions and settings" Guest="0" />
+  				<row Rolename="AR Clerk" ApplicationName="/" Descr="Access to AR functions" Guest="0" />
+  				<row Rolename="AR Viewer" ApplicationName="/" Descr="Read-only access to AR functions" Guest="0" />
+  				<row Rolename="Archivist" ApplicationName="/" Descr="Archive Manager" Guest="0" />
+  				<row Rolename="BI" ApplicationName="/" Descr="Access to Business Intelligence Views" Guest="0" />
+  				<row Rolename="BRANCH CAP" ApplicationName="/" Descr="Revision Two Capital Role" Guest="0" />
+  				<row Rolename="BRANCH HQ" ApplicationName="/" Descr="Product Company Role" Guest="0" />
+  				<row Rolename="BRANCH VA" ApplicationName="/" Descr="Services Company Role" Guest="0" />
+  				<row Rolename="BusinessDateOverride" ApplicationName="/" Descr="Business Date Override" Guest="0" />
+  				<row Rolename="CA Admin" ApplicationName="/" Descr="Access to CA functions and settings" Guest="0" />
+  				<row Rolename="CA Clerk" ApplicationName="/" Descr="Access to CA functions" Guest="0" />
+  				<row Rolename="CA Viewer" ApplicationName="/" Descr="Read-only access to CA functions" Guest="0" />
+  				<row Rolename="CM Admin" ApplicationName="/" Descr="Access to CM functions and settings" Guest="0" />
+  				<row Rolename="CM Viewer" ApplicationName="/" Descr="Read-only access to CM functions" Guest="0" />
+  				<row Rolename="CONSULTANT" ApplicationName="/" Descr="Consultant" Guest="0" />
+  				<row Rolename="CR Marketing Manager" ApplicationName="/" Descr="Access to Marketing functions and settings" Guest="0" />
+  				<row Rolename="CR Sales &amp; Marketing Admin" ApplicationName="/" Descr="Full access to  Sales and Marketing functions and settings" Guest="0" />
+  				<row Rolename="CR Sales Representative" ApplicationName="/" Descr="Access to Sales functions and settings" Guest="0" />
+  				<row Rolename="CR Support Admin" ApplicationName="/" Descr="Full access to Support functionality and settings" Guest="0" />
+  				<row Rolename="CR Support Representative" ApplicationName="/" Descr="Access to Support functionality and settings" Guest="0" />
+  				<row Rolename="CR Viewer" ApplicationName="/" Descr="Read-only access to marketing, sales and support forms" Guest="0" />
+  				<row Rolename="CS Admin" ApplicationName="/" Descr="Access to system functions and configuration items" Guest="0" />
+  				<row Rolename="Customer Data Manager" ApplicationName="/" Descr="Full access to data entry forms related to customers" Guest="0" />
+  				<row Rolename="Customer Portal Case Manager" ApplicationName="/" Descr="Access to support cases" Guest="1" />
+  				<row Rolename="Customer Portal Company Manager" ApplicationName="/" Descr="Access to manage company-level settings through the Company Profile screen, including company details and payment methods" Guest="1" />
+  				<row Rolename="Customer Portal Contact Manager" ApplicationName="/" Descr="Access to company contacts and their portal access through the Company Profile screen, including adding, updating, deactivating contacts and managing portal roles" Guest="1" />
+  				<row Rolename="Customer Portal Financial Manager" ApplicationName="/" Descr="Access to financial information, including invoices, balances, statements, and payments" Guest="1" />
+  				<row Rolename="Customer Portal Manager" ApplicationName="/" Descr="Full access for managing orders, cases, and financial documents" Guest="1" />
+  				<row Rolename="Customer Portal Order Manager" ApplicationName="/" Descr="Access to the cart, catalog, and orders" Guest="1" />
+  				<row Rolename="Customizer" ApplicationName="/" Descr="Customizer" Guest="0" />
+  				<row Rolename="DashboardDesigner" ApplicationName="/" Descr="Dashboard Designer" Guest="0" />
+  				<row Rolename="Data Privacy Controller" ApplicationName="/" Descr="Data Privacy Controller" Guest="0" />
+  				<row Rolename="DEMO" ApplicationName="/" Descr="Demo role for eval (add branch roles)" Guest="0" />
+  				<row Rolename="DR Admin" ApplicationName="/" Descr="Access to DR functions and settings" Guest="0" />
+  				<row Rolename="DR Viewer" ApplicationName="/" Descr="Read-only access to DR functions" Guest="0" />
+  				<row Rolename="EMPLOYEE" ApplicationName="/" Descr="Access to tasks, approvals, expenses, etc." Guest="0" />
+  				<row Rolename="ESign" ApplicationName="/" Descr="Access to eSign Central and eSign Sync" Guest="0" />
+  				<row Rolename="FA Admin" ApplicationName="/" Descr="Access to FA functions and settings" Guest="0" />
+  				<row Rolename="FA Clerk" ApplicationName="/" Descr="Access to FA functions" Guest="0" />
+  				<row Rolename="FA Viewer" ApplicationName="/" Descr="Read-only access to FA functions" Guest="0" />
+  				<row Rolename="Field-Level Audit" ApplicationName="/" Descr="Role that can access Field-Level Audit" Guest="0" />
+  				<row Rolename="Financial Supervisor" ApplicationName="/" Descr="Financial Supervisor" Guest="0" />
+  				<row Rolename="GL Admin" ApplicationName="/" Descr="Access to GL functions and settings" Guest="0" />
+  				<row Rolename="GL Clerk" ApplicationName="/" Descr="Access to GL functions" Guest="0" />
+  				<row Rolename="GL Viewer" ApplicationName="/" Descr="Read-only access to GL functions" Guest="0" />
+  				<row Rolename="Guest" ApplicationName="/" Descr="External Guest Role" Guest="1" />
+  				<row Rolename="IN Admin" ApplicationName="/" Descr="Full access to IN functions and settings" Guest="0" />
+  				<row Rolename="IN Clerk" ApplicationName="/" Descr="Limited access to IN functions related to warehouse stock management" Guest="0" />
+  				<row Rolename="IN Manager" ApplicationName="/" Descr="Full access to IN functions" Guest="0" />
+  				<row Rolename="IN Receiver" ApplicationName="/" Descr="Access to IN functions related to receiving goods" Guest="0" />
+  				<row Rolename="IN Shipper" ApplicationName="/" Descr="Access to IN functions related to shipping goods" Guest="0" />
+  				<row Rolename="IN Viewer" ApplicationName="/" Descr="Read-only access to IN functions" Guest="0" />
+  				<row Rolename="Internal Employee" ApplicationName="/" Descr="Access to tasks and events, time card, expense receipts and claims, personal settings, and Help" Guest="0" />
+  				<row Rolename="Internal User" ApplicationName="/" Descr="Allows the user to change personal  settings, and view Help" Guest="0" />
+  				<row Rolename="Inventory Data Manager" ApplicationName="/" Descr="Full access to data entry forms related to inventory items" Guest="0" />
+  				<row Rolename="LLM Prompt Engineer" ApplicationName="/" Descr="Authorization to create LLM Prompts" Guest="0" />
+  				<row Rolename="LLM Security Expert" ApplicationName="/" Descr="Authorization to create LLM System Instructions" Guest="0" />
+  				<row Rolename="MFG Admin" ApplicationName="/" Descr="Access to all Manufacturing Module Settings" Guest="0" />
+  				<row Rolename="MFG Cost Accountant" ApplicationName="/" Descr="Manufacturing Cost Accountant" Guest="0" />
+  				<row Rolename="MFG Engineer" ApplicationName="/" Descr="Manufacturing Engineer" Guest="0" />
+  				<row Rolename="MFG Engineering MGR" ApplicationName="/" Descr="Manufacturing Engineering Manager" Guest="0" />
+  				<row Rolename="MFG Planner" ApplicationName="/" Descr="Manufacturing Planner" Guest="0" />
+  				<row Rolename="MFG Planning MGR" ApplicationName="/" Descr="Manufacturing Planning Manager" Guest="0" />
+  				<row Rolename="MFG Production MGR" ApplicationName="/" Descr="Manufacturing Production Manager" Guest="0" />
+  				<row Rolename="MFG Sales Engineer" ApplicationName="/" Descr="Manufacturing Sales Engineer" Guest="0" />
+  				<row Rolename="MFG Scheduler" ApplicationName="/" Descr="Manufacturing Scheduler" Guest="0" />
+  				<row Rolename="MFG Scheduling MGR" ApplicationName="/" Descr="Manufacturing Scheduling Manager" Guest="0" />
+  				<row Rolename="MFG Shop Floor" ApplicationName="/" Descr="Manufacturing Shop floor employee" Guest="0" />
+  				<row Rolename="MFG Viewer" ApplicationName="/" Descr="View Production Order Information Only" Guest="0" />
+  				<row Rolename="MFG Warehouse" ApplicationName="/" Descr="Manufacturing Warehouse" Guest="0" />
+  				<row Rolename="ODatav4 User" ApplicationName="/" Descr="Access to data exposed via DAC-based OData" Guest="0" />
+  				<row Rolename="PDF Annotator" ApplicationName="/" Descr="Access to PDF annotation" Guest="0" />
+  				<row Rolename="PJ Admin" ApplicationName="/" Descr="Access to construction management settings" Guest="0" />
+  				<row Rolename="PM Admin" ApplicationName="/" Descr="Access to project management settings" Guest="0" />
+  				<row Rolename="PM Financial Controller" ApplicationName="/" Descr="Access to project-related financial analytics" Guest="0" />
+  				<row Rolename="PM Operations Manager" ApplicationName="/" Descr="Access to project management analytics" Guest="0" />
+  				<row Rolename="PM Project Manager" ApplicationName="/" Descr="Access to project management functions and analytics" Guest="0" />
+  				<row Rolename="PM Project Manager Assistant" ApplicationName="/" Descr="Access to project administration functions and analytics" Guest="0" />
+  				<row Rolename="PM Superintendent" ApplicationName="/" Descr="Access to project site-related functions" Guest="0" />
+  				<row Rolename="PM Viewer" ApplicationName="/" Descr="Read-only access to projects" Guest="0" />
+  				<row Rolename="PO Admin" ApplicationName="/" Descr="Full access to PO functions and settings" Guest="0" />
+  				<row Rolename="PO Buyer" ApplicationName="/" Descr="Full access to PO functions related to orders and replenishment" Guest="0" />
+  				<row Rolename="PO Clerk" ApplicationName="/" Descr="Limited access to PO functions related to orders" Guest="0" />
+  				<row Rolename="PO Manager" ApplicationName="/" Descr="Full access to PO functions" Guest="0" />
+  				<row Rolename="PO Viewer" ApplicationName="/" Descr="Read-only access to PO functions" Guest="0" />
+  				<row Rolename="Portal Admin" ApplicationName="/" Descr="Access to portal configuration" Guest="0" />
+  				<row Rolename="Portal User" ApplicationName="/" Descr="Portal user" Guest="1" />
+  				<row Rolename="PR Admin" ApplicationName="/" Descr="Access to all PR functions and settings" Guest="0" />
+  				<row Rolename="PR Clerk" ApplicationName="/" Descr="Access to data entry PR functions and read-only access to PR settings" Guest="0" />
+  				<row Rolename="PR Manager" ApplicationName="/" Descr="Access to all PR functions and read-only access to PR settings" Guest="0" />
+  				<row Rolename="PR Viewer" ApplicationName="/" Descr="Read-Only access to all PR functions" Guest="0" />
+  				<row Rolename="Project Accountant" ApplicationName="/" Descr="Project Accountant" Guest="0" />
+  				<row Rolename="PURCHASING" ApplicationName="/" Descr="Purchasing" Guest="0" />
+  				<row Rolename="READONLY" ApplicationName="/" Descr="Read only role" Guest="0" />
+  				<row Rolename="ReportDesigner" ApplicationName="/" Descr="Report Designer" Guest="0" />
+  				<row Rolename="SALES" ApplicationName="/" Descr="Sales" Guest="0" />
+  				<row Rolename="SALESMGR" ApplicationName="/" Descr="Sales Manager" Guest="0" />
+  				<row Rolename="SERVICEMGR" ApplicationName="/" Descr="Service Manager" Guest="0" />
+  				<row Rolename="SERVICETECH" ApplicationName="/" Descr="Service Tech" Guest="0" />
+  				<row Rolename="SFK App Access" ApplicationName="/" Descr="Shop Floor Kiosk App Access" Guest="0" />
+  				<row Rolename="SFK User" ApplicationName="/" Descr="Shop Floor Kiosk User" Guest="0" />
+  				<row Rolename="SHIPPING" ApplicationName="/" Descr="Shipping and warehousing" Guest="0" />
+  				<row Rolename="SO Admin" ApplicationName="/" Descr="Full access to SO functions and settings" Guest="0" />
+  				<row Rolename="SO Clerk" ApplicationName="/" Descr="Limited access to SO functions" Guest="0" />
+  				<row Rolename="SO Manager" ApplicationName="/" Descr="Full access to SO functions" Guest="0" />
+  				<row Rolename="SO Viewer" ApplicationName="/" Descr="Read-only access to SO functions" Guest="0" />
+  				<row Rolename="SUPPORT" ApplicationName="/" Descr="Support" Guest="0" />
+  				<row Rolename="TX Admin" ApplicationName="/" Descr="Access to TX functions and settings" Guest="0" />
+  				<row Rolename="TX Viewer" ApplicationName="/" Descr="Read-only access to TX functions" Guest="0" />
+  				<row Rolename="Vendor Data Manager" ApplicationName="/" Descr="Full access to data entry forms related to vendors" Guest="0" />
+  				<row Rolename="Wiki Admin" ApplicationName="/" Descr="Wiki Administrator to set other users access rights to Wiki" Guest="0" />
+  				<row Rolename="Wiki Author" ApplicationName="/" Descr="Role provides access rights for creating Wiki articles" Guest="0" />
+  			</Roles>
+  		</data>
+  	</data-set>
+  </ScreenWithRights>
+  <SiteMapNode>
+  	<data-set>
+  		<relations format-version="4" relations-version="20250701" main-table="SiteMap">
+  			<link from="MUIScreen (NodeID)" to="SiteMap (NodeID)" />
+  			<link from="MUIWorkspace (WorkspaceID)" to="MUIScreen (WorkspaceID)" type="FromMaster" linkname="workspaceToScreen" split-location="yes" updateable="True" />
+  			<link from="MUISubcategory (SubcategoryID)" to="MUIScreen (SubcategoryID)" type="FromMaster" updateable="True" />
+  			<link from="MUITile (ScreenID)" to="SiteMap (ScreenID)" />
+  			<link from="MUIWorkspace (WorkspaceID)" to="MUITile (WorkspaceID)" type="FromMaster" linkname="workspaceToTile" split-location="yes" updateable="True" />
+  			<link from="MUIArea (AreaID)" to="MUIWorkspace (AreaID)" type="FromMaster" updateable="True" />
+  			<link from="MUIPinnedScreen (NodeID, WorkspaceID)" to="MUIScreen (NodeID, WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+  			<link from="MUIFavoriteWorkspace (WorkspaceID)" to="MUIWorkspace (WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+  		</relations>
+  		<layout>
+  			<table name="SiteMap">
+  				<table name="MUIScreen" uplink="(NodeID) = (NodeID)">
+  					<table name="MUIPinnedScreen" uplink="(NodeID, WorkspaceID) = (NodeID, WorkspaceID)" />
+  				</table>
+  				<table name="MUITile" uplink="(ScreenID) = (ScreenID)" />
+  			</table>
+  			<table name="MUIWorkspace">
+  				<table name="MUIFavoriteWorkspace" uplink="(WorkspaceID) = (WorkspaceID)" />
+  			</table>
+  			<table name="MUISubcategory" />
+  			<table name="MUIArea" />
+  		</layout>
+  		<data>
+  			<SiteMap>
+  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/WarrantyClaim/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" />
+  			</SiteMap>
+  		</data>
+  	</data-set>
+  </SiteMapNode>
+  <Sql TableName="AISIWebhookSecret" TableSchemaXml="#CDATA">
+  	<CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookSecret">
+    <col name="CompanyID" type="Int" default="Zero" />
+    <col name="WebHookID" type="UniqueIdentifier" />
+    <col name="Secret" type="NVarChar(2048)" nullable="true" />
+    <col name="RotatingSecret" type="NVarChar(2048)" nullable="true" />
+    <col name="RotatingExpiresOn" type="DateTime" nullable="true" />
+    <col name="AllowedAddresses" type="VarChar(500)" nullable="true" />
+    <col name="ClientAddressHeader" type="VarChar(64)" nullable="true" />
+    <col name="TrustedProxyDepth" type="Int" nullable="true" />
+    <col name="NoteID" type="UniqueIdentifier" nullable="true" />
+    <col name="tstamp" type="Timestamp" />
+    <col name="CreatedByID" type="UniqueIdentifier" />
+    <col name="CreatedByScreenID" type="Char(8)" />
+    <col name="CreatedDateTime" type="DateTime" />
+    <col name="LastModifiedByID" type="UniqueIdentifier" />
+    <col name="LastModifiedByScreenID" type="Char(8)" />
+    <col name="LastModifiedDateTime" type="DateTime" />
+    <index name="AISIWebhookSecret_PK" clustered="true" primary="true" unique="true">
+      <col name="CompanyID" />
+      <col name="WebHookID" />
+    </index>
+  </table>]]></CDATA>
+  </Sql>
+</Customization>

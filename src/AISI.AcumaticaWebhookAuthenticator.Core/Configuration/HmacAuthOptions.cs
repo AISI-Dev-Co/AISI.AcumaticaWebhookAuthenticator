@@ -55,6 +55,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </remarks>
     public sealed class HmacAuthOptions
     {
+        #region Construction
         /// <summary>
         /// Creates options.
         /// </summary>
@@ -72,7 +73,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             SecretProvider = secretProvider ?? throw new ArgumentNullException(nameof(secretProvider));
             SignatureHeader = signatureHeader;
         }
+        #endregion
 
+        #region Options
         /// <summary>Where the signing secret comes from.</summary>
         public IWebhookSecretProvider SecretProvider { get; }
 
@@ -102,7 +105,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// what turns an <c>HMAC</c> scheme into an <c>HMACTS</c> one.
         /// </summary>
         public TimestampValidation? Timestamp { get; set; }
+        #endregion
 
+        #region Validation
         /// <summary>
         /// Describes what is wrong with this configuration, or <see langword="null"/> when it is
         /// coherent.
@@ -159,5 +164,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return null;
         }
+        #endregion
     }
 }
