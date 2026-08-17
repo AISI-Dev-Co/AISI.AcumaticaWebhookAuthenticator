@@ -85,12 +85,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             bool hasRotating = !string.IsNullOrEmpty(e.Row.RotatingSecret);
             bool hasExpiry = e.Row.RotatingExpiresOn is object;
 
+            // RaiseExceptionHandling marks the field red; the throw is what actually blocks the
+            // save - without it the row commits with the error displayed.
             if (hasRotating && !hasExpiry)
             {
                 e.Cache.RaiseExceptionHandling<AISIWebhookSecret.rotatingExpiresOn>(
                     e.Row,
                     null,
                     new PXSetPropertyException(e.Row, Messages.RotatingSecretNeedsExpiry));
+
+                throw new PXRowPersistingException(
+                    nameof(AISIWebhookSecret.rotatingExpiresOn),
+                    null,
+                    Messages.RotatingSecretNeedsExpiry);
             }
 
             if (hasExpiry && !hasRotating)
@@ -99,6 +106,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     e.Row,
                     null,
                     new PXSetPropertyException(e.Row, Messages.RotationExpiryNeedsSecret));
+
+                throw new PXRowPersistingException(
+                    nameof(AISIWebhookSecret.rotatingSecret),
+                    null,
+                    Messages.RotationExpiryNeedsSecret);
             }
         }
         #endregion

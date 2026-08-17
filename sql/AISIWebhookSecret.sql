@@ -4,15 +4,16 @@
 -- Run on a development database; in a customization project deliver the same schema as the
 -- project's Table entry so publish creates it.
 --
--- Secret and RotatingSecret hold [PXRSACryptString] ciphertext, not plaintext. The column length
--- is what the DAC attribute declares (255); the maintenance graph rejects longer input rather
--- than letting anything truncate.
+-- Secret and RotatingSecret hold [PXRSACryptString] ciphertext, not plaintext. Ciphertext is
+-- several times the plaintext (base64 over UTF-16, plus RSA block padding), so the columns are
+-- budgeted for a 255-char plaintext under site keys up to 4096 bits; the maintenance graph
+-- enforces the 255-char plaintext limit on entry.
 
 CREATE TABLE [dbo].[AISIWebhookSecret] (
     [CompanyID]              INT              NOT NULL DEFAULT 0,
     [WebHookID]              UNIQUEIDENTIFIER NOT NULL,
-    [Secret]                 NVARCHAR(255)    NULL,
-    [RotatingSecret]         NVARCHAR(255)    NULL,
+    [Secret]                 NVARCHAR(2048)   NULL,
+    [RotatingSecret]         NVARCHAR(2048)   NULL,
     [RotatingExpiresOn]      DATETIME         NULL,
     [AllowedAddresses]       VARCHAR(500)     NULL,
     [ClientAddressHeader]    VARCHAR(64)      NULL,

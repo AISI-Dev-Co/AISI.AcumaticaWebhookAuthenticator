@@ -162,17 +162,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return false;
             }
 
-            // Bracketed IPv6, with or without a port: [2001:db8::1] or [2001:db8::1]:4711.
+            // Bracketed IPv6, alone or with a numeric port: [2001:db8::1] or [2001:db8::1]:4711.
+            // Anything after the bracket that is not a well-formed port is malformed, not
+            // ignorable - "unparseable fails closed" has to mean the whole entry.
             if (text[0] == '[')
             {
                 int close = text.IndexOf(']');
-                if (close < 0)
+                if (close < 0 || !IsAbsentOrPort(text, close + 1))
                 {
                     return false;
                 }
 
-                text = text.Substring(1, close - 1);
-                return IPAddress.TryParse(text, out address);
+                return IPAddress.TryParse(text.Substring(1, close - 1), out address);
             }
 
             if (IPAddress.TryParse(text, out address))
@@ -181,15 +182,36 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
 
             // Some front ends (IIS ARR among them) append IPv4 with a port. A lone colon cannot be
-            // part of an IPv4 literal, so stripping from the last one is unambiguous; IPv6 with a
+            // part of an IPv4 literal, so splitting at the last one is unambiguous; IPv6 with a
             // port must use brackets.
             int lastColon = text.LastIndexOf(':');
-            if (lastColon > 0 && text.IndexOf(':') == lastColon)
+            if (lastColon > 0 && text.IndexOf(':') == lastColon && IsPort(text, lastColon + 1))
             {
                 return IPAddress.TryParse(text.Substring(0, lastColon), out address);
             }
 
             return false;
+        }
+
+        private static bool IsAbsentOrPort(string text, int index) =>
+            index == text.Length || (text[index] == ':' && IsPort(text, index + 1));
+
+        private static bool IsPort(string text, int index)
+        {
+            if (index >= text.Length)
+            {
+                return false;
+            }
+
+            for (int i = index; i < text.Length; i++)
+            {
+                if (text[i] < '0' || text[i] > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
         #endregion
     }

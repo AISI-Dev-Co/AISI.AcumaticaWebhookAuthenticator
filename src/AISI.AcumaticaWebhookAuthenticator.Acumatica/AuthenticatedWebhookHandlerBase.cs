@@ -42,11 +42,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// separate secret per registration, uniformly stored, with no per-handler storage code.
     /// </para>
     /// <para>
-    /// One authenticator is built per webhook registration, on its first request, and cached for
-    /// the handler's lifetime. A misconfiguration — an incoherent option set, a <c>{path}</c>
-    /// template — therefore throws on the first request rather than at deploy time; it throws
-    /// loudly and every time, rather than denying quietly, because a developer error should read as
-    /// one and not as a sender problem.
+    /// The platform constructs a fresh handler instance per request, so the authenticator map is
+    /// static, keyed by handler type and webhook registration: one authenticator is built on a
+    /// registration's first request and reused process-wide. A misconfiguration — an incoherent
+    /// option set, a <c>{path}</c> template — therefore throws on the first request rather than at
+    /// deploy time; it throws loudly and on every request, rather than denying quietly, because a
+    /// developer error should read as one and not as a sender problem.
     /// </para>
     /// <para>
     /// Authentication failures are uniform: same 401, same generic body, whatever the reason. The
@@ -56,8 +57,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
     {
         #region Construction and state
-        private readonly ConcurrentDictionary<Guid, RegistrationEntry> _registrations =
-            new ConcurrentDictionary<Guid, RegistrationEntry>();
+        private static readonly ConcurrentDictionary<(Type HandlerType, Guid WebhookId), RegistrationEntry> Registrations =
+            new ConcurrentDictionary<(Type HandlerType, Guid WebhookId), RegistrationEntry>();
 
         private readonly int _maxBodyLength;
 
@@ -138,8 +139,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 return;
             }
 
-            RegistrationEntry registration = _registrations.GetOrAdd(
-                context.Definition.Id,
+            RegistrationEntry registration = Registrations.GetOrAdd(
+                (GetType(), context.Definition.Id),
                 BuildRegistration);
 
             // Per-request policy (the ERP-configured allowlist) is the provider's, applied here so
@@ -180,9 +181,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         #endregion
 
         #region Internals
-        private RegistrationEntry BuildRegistration(Guid webhookId)
+        private RegistrationEntry BuildRegistration((Type HandlerType, Guid WebhookId) key)
         {
-            IWebhookSecretProvider provider = CreateSecretProvider(webhookId);
+            IWebhookSecretProvider provider = CreateSecretProvider(key.WebhookId);
 
             IWebhookAuthenticator authenticator =
                 CreateAuthenticator(provider)

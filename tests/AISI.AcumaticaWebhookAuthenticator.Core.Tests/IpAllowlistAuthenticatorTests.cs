@@ -161,6 +161,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [InlineData("unknown")]
         [InlineData("")]
         [InlineData("[2001:db8::9")]
+        [InlineData("[2001:db8::9]garbage")]
+        [InlineData("[2001:db8::9]:")]
+        [InlineData("[2001:db8::9]:12x")]
+        [InlineData("203.0.113.9:")]
+        [InlineData("203.0.113.9:12x")]
         public void UnparseableEntry_FailsAsMalformed(string entry)
         {
             var gate = new IpAllowlistAuthenticator(new RecordingAuthenticator(AuthResult.Success()), Allowlist);

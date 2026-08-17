@@ -2,6 +2,8 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Threading;
 using AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
@@ -16,9 +18,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// <remarks>
     /// Rows are read through a <see cref="PXCache"/> with the crypt fields set decrypted. Reads
     /// (misses included) are cached for <see cref="CacheDuration"/> in a store shared across
-    /// instances, so admin edits apply within a minute with no restart and unconfigured endpoints
-    /// cost no query per request; entries are <see cref="Lazy{T}"/> so an expiry under load
-    /// refreshes with one database read. Thread-safe.
+    /// instances and keyed by <em>tenant and webhook</em> — tenants copied from one another carry
+    /// identical <c>WebHookID</c>s, and a tenant-blind key would serve one tenant's secret to
+    /// another. Entries are <see cref="Lazy{T}"/> so an expiry under load refreshes with one
+    /// database read; a load that throws is evicted immediately, because a memoized exception
+    /// would otherwise replay a transient database failure until the application restarted.
+    /// Thread-safe.
     /// </remarks>
     public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
@@ -26,8 +31,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>How long a read (including a miss) is reused before the database is consulted again.</summary>
         public static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-        private static readonly ConcurrentDictionary<Guid, Lazy<CacheEntry>> Cache =
-            new ConcurrentDictionary<Guid, Lazy<CacheEntry>>();
+        private static readonly ConcurrentDictionary<(string Company, Guid WebhookId), Lazy<CacheEntry>> Cache =
+            new ConcurrentDictionary<(string Company, Guid WebhookId), Lazy<CacheEntry>>();
 
         private readonly Guid _webhookId;
 
@@ -65,7 +70,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             {
                 // The administrator asked for an IP restriction; the one thing this must not do
                 // is quietly not restrict.
-                return DenyAllAuthenticator.Instance;
+                return new DenyAllAuthenticator(inner);
             }
 
             if (entry.Allowlist is null)
@@ -84,28 +89,50 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         #region Cache and loading
         private CacheEntry Current()
         {
-            while (true)
+            (string, Guid) key = (PXAccess.GetCompanyName(), _webhookId);
+
+            Lazy<CacheEntry> lazy = Cache.GetOrAdd(key, CreateEntry);
+            CacheEntry entry = Value(key, lazy);
+
+            if (DateTime.UtcNow - entry.FetchedOn < CacheDuration)
             {
-                Lazy<CacheEntry> lazy = Cache.GetOrAdd(_webhookId, CreateEntry);
-                CacheEntry entry = lazy.Value;
+                return entry;
+            }
 
-                if (DateTime.UtcNow - entry.FetchedOn < CacheDuration)
-                {
-                    return entry;
-                }
+            // Whichever thread wins the swap loads once; losers read the winner's value. The
+            // replacement is returned even if a slow load leaves it nominally stale already -
+            // it is the freshest value there is, and re-looping on it would spin.
+            Lazy<CacheEntry> replacement = CreateEntry(key);
+            if (!Cache.TryUpdate(key, replacement, lazy))
+            {
+                replacement = Cache.GetOrAdd(key, replacement);
+            }
 
-                // Whichever thread wins the swap loads once; losers re-read the winner's value.
-                Cache.TryUpdate(_webhookId, CreateEntry(_webhookId), lazy);
+            return Value(key, replacement);
+        }
+
+        private static CacheEntry Value((string, Guid) key, Lazy<CacheEntry> lazy)
+        {
+            try
+            {
+                return lazy.Value;
+            }
+            catch
+            {
+                // ExecutionAndPublication memoizes the exception; left in place it would replay
+                // one transient database failure on every request until the app restarted. Evict
+                // (only if this exact lazy is still the entry) so the next request retries.
+                ((ICollection<KeyValuePair<(string, Guid), Lazy<CacheEntry>>>)Cache)
+                    .Remove(new KeyValuePair<(string, Guid), Lazy<CacheEntry>>(key, lazy));
+                throw;
             }
         }
 
-        private Lazy<CacheEntry> CreateEntry(Guid webhookId) =>
-            new Lazy<CacheEntry>(Load, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private Lazy<CacheEntry> CreateEntry((string Company, Guid WebhookId) key) =>
+            new Lazy<CacheEntry>(Load, LazyThreadSafetyMode.ExecutionAndPublication);
 
         private CacheEntry Load()
         {
-            DateTime fetchedOn = DateTime.UtcNow;
-
             var graph = PXGraph.CreateInstance<PXGraph>();
             PXCache cache = graph.Caches[typeof(AISIWebhookSecret)];
 
@@ -116,6 +143,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                     AISIWebhookSecret,
                     Where<AISIWebhookSecret.webHookID, Equal<Required<AISIWebhookSecret.webHookID>>>>
                 .Select(graph, _webhookId);
+
+            // Stamped after the query, not before it: a slow query stamped early would produce an
+            // entry already near expiry, and a refresh that immediately re-refreshes.
+            DateTime fetchedOn = DateTime.UtcNow;
 
             if (row is null)
             {
@@ -199,12 +230,23 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public DateTime FetchedOn { get; }
         }
 
-        /// <summary>Denies every request; substituted when a stored allowlist cannot be applied.</summary>
-        private sealed class DenyAllAuthenticator : IWebhookAuthenticator
+        /// <summary>
+        /// Denies every request; substituted when a stored allowlist cannot be applied. Carries
+        /// the wrapped scheme's challenge so the deny-all state is indistinguishable from any
+        /// other 401.
+        /// </summary>
+        private sealed class DenyAllAuthenticator : IWebhookAuthenticator, IChallengeSource
         {
-            public static DenyAllAuthenticator Instance { get; } = new DenyAllAuthenticator();
+            private readonly IWebhookAuthenticator _inner;
+
+            public DenyAllAuthenticator(IWebhookAuthenticator inner)
+            {
+                _inner = inner;
+            }
 
             public string Code => "MISCONFIGURED";
+
+            public string? Challenge => (_inner as IChallengeSource)?.Challenge;
 
             public AuthResult Authenticate(WebhookAuthContext context) =>
                 AuthResult.Fail(Diagnostics.AuthFailureCode.Misconfigured);

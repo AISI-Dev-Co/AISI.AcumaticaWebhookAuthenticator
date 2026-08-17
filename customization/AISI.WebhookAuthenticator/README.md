@@ -35,7 +35,8 @@ cp src/AISI.AcumaticaWebhookAuthenticator.Acumatica/bin/Release/net48/AISI.Acuma
 ```
 
 The release workflow fails if the committed DLL's assembly version does not match
-`Directory.Build.props`, so a stale binary cannot ship silently.
+`Directory.Build.props`. Known limitation: the gate catches a version bump without a rebuild, not
+a code change without a version bump — bump the version whenever the adapter changes.
 
 ## Site map URL and tenants
 

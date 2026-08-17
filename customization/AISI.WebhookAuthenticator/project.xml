@@ -188,8 +188,8 @@
   	<CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookSecret">
     <col name="CompanyID" type="Int" default="Zero" />
     <col name="WebHookID" type="UniqueIdentifier" />
-    <col name="Secret" type="NVarChar(255)" nullable="true" />
-    <col name="RotatingSecret" type="NVarChar(255)" nullable="true" />
+    <col name="Secret" type="NVarChar(2048)" nullable="true" />
+    <col name="RotatingSecret" type="NVarChar(2048)" nullable="true" />
     <col name="RotatingExpiresOn" type="DateTime" nullable="true" />
     <col name="AllowedAddresses" type="VarChar(500)" nullable="true" />
     <col name="ClientAddressHeader" type="VarChar(64)" nullable="true" />

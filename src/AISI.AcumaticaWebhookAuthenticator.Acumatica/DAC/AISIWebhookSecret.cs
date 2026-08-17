@@ -27,10 +27,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
     public class AISIWebhookSecret : PXBqlTable, IBqlTable
     {
         /// <summary>
-        /// The crypt columns' declared length. The maintenance graph validates against the same
-        /// constant, so widening the column cannot silently reintroduce truncation.
+        /// The plaintext limit the maintenance graph enforces on entry.
         /// </summary>
         public const int SecretLength = 255;
+
+        /// <summary>
+        /// The crypt columns' storage length. Ciphertext is several times the plaintext —
+        /// <c>[PXRSACryptString]</c> stores base64 over UTF-16 bytes (~2.7×) and RSA block
+        /// padding adds more — so the column is budgeted for a <see cref="SecretLength"/>-char
+        /// plaintext under site keys up to 4096 bits (1368 chars), not for the plaintext itself.
+        /// A 255-length column truncated any secret past ~94 characters into unverifiable
+        /// garbage, silently.
+        /// </summary>
+        public const int SecretColumnLength = 2048;
 
         #region WebHookID
         /// <summary>The webhook registration this secret belongs to.</summary>
@@ -47,7 +56,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 
         #region Secret
         /// <summary>The active secret, exactly as the sender's dashboard shows it.</summary>
-        [PXRSACryptString(SecretLength)]
+        [PXRSACryptString(SecretColumnLength)]
         [PXDefault]
         [PXUIField(DisplayName = "Secret")]
         public virtual string? Secret { get; set; }
@@ -59,7 +68,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// The outgoing secret during a rotation overlap, accepted alongside
         /// <see cref="Secret"/> until <see cref="RotatingExpiresOn"/>.
         /// </summary>
-        [PXRSACryptString(SecretLength)]
+        [PXRSACryptString(SecretColumnLength)]
         [PXUIField(DisplayName = "Rotating Secret")]
         public virtual string? RotatingSecret { get; set; }
         public abstract class rotatingSecret : BqlString.Field<rotatingSecret> { }
@@ -68,9 +77,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #region RotatingExpiresOn
         /// <summary>
         /// When the rotation overlap ends, in UTC. After this instant the rotating secret is no
-        /// longer accepted, so a forgotten rotation closes itself.
+        /// longer accepted, so a forgotten rotation closes itself. <c>UseTimeZone = false</c> is
+        /// load-bearing: the attribute's default converts through the session timezone on save
+        /// and the webhook scope's timezone on read, which would shift a labeled-UTC instant by
+        /// hours in each direction.
         /// </summary>
-        [PXDBDateAndTime(DisplayNameDate = "Rotation Ends (UTC)", DisplayNameTime = "Rotation End Time (UTC)")]
+        [PXDBDateAndTime(UseTimeZone = false, DisplayNameDate = "Rotation Ends (UTC)", DisplayNameTime = "Rotation End Time (UTC)")]
         [PXUIField(DisplayName = "Rotation Ends (UTC)")]
         public virtual DateTime? RotatingExpiresOn { get; set; }
         public abstract class rotatingExpiresOn : BqlDateTime.Field<rotatingExpiresOn> { }
