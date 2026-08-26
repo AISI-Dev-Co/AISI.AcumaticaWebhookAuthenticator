@@ -4,14 +4,7 @@ using System;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>
-    /// An <see cref="IWebhookSecretProvider"/> over a secret already in memory.
-    /// </summary>
-    /// <remarks>
-    /// Intended for tests and for the signature tester. Using it in production means a secret
-    /// compiled into an assembly, which cannot be rotated without a redeployment and will be
-    /// recoverable by anyone who can read the DLL.
-    /// </remarks>
+    /// <summary>In-memory secret provider for tests. Do not use in production.</summary>
     public sealed class StaticSecretProvider : IWebhookSecretProvider
     {
         private readonly WebhookSecret _secret;

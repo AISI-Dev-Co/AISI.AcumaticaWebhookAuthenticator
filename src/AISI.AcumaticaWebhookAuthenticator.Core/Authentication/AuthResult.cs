@@ -2,14 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The outcome of an authentication attempt.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="FailureCode"/> is diagnostic only. Callers must not vary the HTTP response by it:
-    /// every failure is the same 401 with the same body. See
-    /// <see cref="Diagnostics.AuthFailureCode"/>.
-    /// </remarks>
+    /// <summary>Authentication outcome. <see cref="FailureCode"/> is for traces, not HTTP responses.</summary>
     public readonly struct AuthResult
     {
         private readonly string? _failureCode;

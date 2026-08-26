@@ -7,13 +7,7 @@ using PX.Api.Webhooks;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// The platform context plus the verified body buffer.
-    /// </summary>
-    /// <remarks>
-    /// Deserialise from <see cref="Body"/> and nothing else — <c>Request.Body</c> is a spent
-    /// stream. The buffer is shared, not copied; do not mutate it.
-    /// </remarks>
+    /// <summary>Platform context plus the verified body. Use <see cref="Body"/>, not the spent request stream.</summary>
     public sealed class AuthenticatedWebhookContext
     {
         private readonly WebhookContext _platform;

@@ -8,10 +8,7 @@ using PX.Data.BQL.Fluent;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// Maintenance graph for webhook secrets — screen <c>AS301000</c>. Stored secrets are never
-    /// displayed back; an administrator pastes a new value to replace one.
-    /// </summary>
+    /// <summary>Webhook secrets screen (AS301000). Stored values are write-only.</summary>
     public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint>
     {
         // The framework populates action and view members by reflection during graph

@@ -11,20 +11,7 @@ using PX.Data;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// Reads a webhook's authentication configuration — secret, rotation pair, IP allowlist —
-    /// from its <see cref="AISIWebhookSecret"/> row, maintained on screen AS301000.
-    /// </summary>
-    /// <remarks>
-    /// Rows are read through a <see cref="PXCache"/> with the crypt fields set decrypted. Reads
-    /// (misses included) are cached for <see cref="CacheDuration"/> in a store shared across
-    /// instances and keyed by <em>tenant and webhook</em> — tenants copied from one another carry
-    /// identical <c>WebHookID</c>s, and a tenant-blind key would serve one tenant's secret to
-    /// another. Entries are <see cref="Lazy{T}"/> so an expiry under load refreshes with one
-    /// database read; a load that throws is evicted immediately, because a memoized exception
-    /// would otherwise replay a transient database failure until the application restarted.
-    /// Thread-safe.
-    /// </remarks>
+    /// <summary>ERP-backed secrets and IP policy for one webhook, cached 30s per tenant.</summary>
     public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
         #region Construction and state

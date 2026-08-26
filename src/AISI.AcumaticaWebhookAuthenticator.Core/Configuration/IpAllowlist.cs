@@ -8,16 +8,7 @@ using System.Net.Sockets;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>
-    /// A set of IP addresses and CIDR blocks that senders are allowed to call from.
-    /// </summary>
-    /// <remarks>
-    /// Only answers "is this address in the set"; where the address comes from — and why that is
-    /// the harder problem — lives on <see cref="Authentication.IpAllowlistAuthenticator"/>.
-    /// IPv4-mapped IPv6 (<c>::ffff:203.0.113.7</c>) matches IPv4 entries, because dual-stack front
-    /// ends report IPv4 callers that way; otherwise families never cross-match. Immutable and safe
-    /// to share across threads.
-    /// </remarks>
+    /// <summary>IP addresses and CIDR blocks. IPv4-mapped IPv6 matches the corresponding IPv4 entry.</summary>
     public sealed class IpAllowlist
     {
         #region Construction and state

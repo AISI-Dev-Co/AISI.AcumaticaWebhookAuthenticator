@@ -12,48 +12,7 @@ using PX.Data;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// An <see cref="IWebhookHandler"/> that authenticates the request before any consumer code
-    /// sees it. Inherit, say how to authenticate, and implement the business logic.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <example>
-    /// A GitHub-signed webhook whose secret an administrator maintains on the webhook secrets
-    /// screen:
-    /// <code>
-    /// public class PushEventHandler : AuthenticatedWebhookHandlerBase
-    /// {
-    ///     protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =&gt;
-    ///         new HmacAuthenticator(WebhookAuthPresets.GitHub(secrets));
-    ///
-    ///     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
-    ///     {
-    ///         // context.Body / context.GetBodyText() is the verified payload.
-    ///     }
-    /// }
-    /// </code>
-    /// </example>
-    /// </para>
-    /// <para>
-    /// The secret provider handed to <see cref="CreateAuthenticator"/> is keyed to the webhook
-    /// registration the request arrived on (<c>WebhookDefinition.Id</c> =
-    /// <c>WebHook.WebHookID</c>), so one handler type registered under several webhooks gets a
-    /// separate secret per registration, uniformly stored, with no per-handler storage code.
-    /// </para>
-    /// <para>
-    /// The platform constructs a fresh handler instance per request, so the authenticator map is
-    /// static, keyed by handler type and webhook registration: one authenticator is built on a
-    /// registration's first request and reused process-wide. A misconfiguration — an incoherent
-    /// option set, a <c>{path}</c> template — therefore throws on the first request rather than at
-    /// deploy time; it throws loudly and on every request, rather than denying quietly, because a
-    /// developer error should read as one and not as a sender problem.
-    /// </para>
-    /// <para>
-    /// Authentication failures are uniform: same 401, same generic body, whatever the reason. The
-    /// specific <see cref="Diagnostics.AuthFailureCode"/> goes to <see cref="PXTrace"/> only.
-    /// </para>
-    /// </remarks>
+    /// <summary>Authenticates the request, then runs <see cref="ProcessAsync"/>. Secrets are per webhook registration.</summary>
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
     {
         #region Construction and state

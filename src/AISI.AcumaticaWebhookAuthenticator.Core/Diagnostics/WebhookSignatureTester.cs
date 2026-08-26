@@ -8,29 +8,7 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 {
-    /// <summary>
-    /// Explains why a signature did or did not match.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Every webhook integration begins with an hour of guessing why signatures do not match. This
-    /// turns that into a diff: here is the exact string your configuration signed, here is what it
-    /// produced, here is what the sender sent.
-    /// </para>
-    /// <para>
-    /// <strong>The report contains the expected signatures and must never be returned in an HTTP
-    /// response.</strong> It is for an administrative screen or a developer's test, where the viewer
-    /// already has access to the secret. Handing it to a caller would let them derive a valid
-    /// signature for a payload of their choosing.
-    /// </para>
-    /// <para>
-    /// The verdict is produced by running the real <see cref="HmacAuthenticator"/> rather than by
-    /// re-implementing its decision logic, so the report can never disagree with what production
-    /// would have done. The cost is that extraction and hashing run twice per call; for a
-    /// manually-invoked diagnostic that is the right trade, and re-implementing the decision to
-    /// save it would reintroduce the drift the design avoids.
-    /// </para>
-    /// </remarks>
+    /// <summary>Explains an HMAC mismatch. Contains expected signatures — never return this over HTTP.</summary>
     public static class WebhookSignatureTester
     {
         /// <summary>

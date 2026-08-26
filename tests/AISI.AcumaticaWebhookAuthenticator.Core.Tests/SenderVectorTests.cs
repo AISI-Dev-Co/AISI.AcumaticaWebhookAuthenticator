@@ -8,14 +8,6 @@ using Xunit;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Tests
 {
-    /// <summary>
-    /// Known-good and known-bad pairs for three sender conventions.
-    /// </summary>
-    /// <remarks>
-    /// These are the tests that matter. Everything else in this library is conventional code; the
-    /// thing that silently breaks an integration is a signature scheme composed slightly wrong, and
-    /// the only defence is fixed vectors that fail loudly when the composition changes.
-    /// </remarks>
     public class SenderVectorTests
     {
         // Published in GitHub's own webhook documentation, which makes this an external anchor
@@ -281,6 +273,51 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             return Signing.SignatureCodec.Encode(
                 Signing.HmacComputer.Compute(Signing.HmacAlgorithm.Sha256, key, signed),
                 Signing.SignatureEncoding.Hex);
+        }
+
+        [Fact]
+        public void JwtBearer_KnownGoodToken_Authenticates()
+        {
+            const string secret = "It's a Secret to Everybody";
+            var received = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
+            string jwt = JwtAuthenticator.Compact(
+                Signing.HmacAlgorithm.Sha256,
+                System.Text.Encoding.UTF8.GetBytes(secret),
+                "{\"exp\":1700003600,\"iss\":\"hooks\"}");
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(received)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            Assert.True(new JwtAuthenticator(WebhookAuthPresets.JwtBearer(Secret(secret)))
+                .Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void JwtBearer_TamperedPayload_IsRejected()
+        {
+            const string secret = "It's a Secret to Everybody";
+            var received = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
+            string jwt = JwtAuthenticator.Compact(
+                Signing.HmacAlgorithm.Sha256,
+                System.Text.Encoding.UTF8.GetBytes(secret),
+                "{\"exp\":1700003600}");
+            string[] parts = jwt.Split('.');
+            string tampered = parts[0] + "." +
+                JwtAuthenticator.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes("{\"exp\":9999999999}")) +
+                "." + parts[2];
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(received)
+                .WithHeader("Authorization", "Bearer " + tampered)
+                .Build();
+
+            AuthResult result = new JwtAuthenticator(WebhookAuthPresets.JwtBearer(Secret(secret)))
+                .Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.SignatureMismatch, result.FailureCode);
         }
     }
 }

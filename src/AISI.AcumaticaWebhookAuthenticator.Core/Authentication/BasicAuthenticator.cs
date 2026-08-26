@@ -5,24 +5,7 @@ using AISI.AcumaticaWebhookAuthenticator.Configuration;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The <c>BASIC</c> scheme: RFC 7617 HTTP Basic authentication over the <c>Authorization</c>
-    /// header.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The secret is the <em>whole</em> <c>user-id:password</c> credential as one value —
-    /// <c>WebhookSecret.FromUtf8("svc-sender:hunter2")</c> — compared in one fixed-time operation.
-    /// Not splitting at the colon is deliberate: no username lookup to time-attack, no
-    /// user-enumeration distinction, and rotation works like every other scheme.
-    /// </para>
-    /// <para>
-    /// Replayable by anyone who observes it, like <c>SECRET</c>; for senders that offer Basic and
-    /// nothing better. On a 401 the host should send <see cref="Challenge"/> (published through
-    /// <see cref="IChallengeSource"/>) — RFC 7235 requires it, and some senders will not retry
-    /// without it. Immutable and safe to share across threads.
-    /// </para>
-    /// </remarks>
+    /// <summary>RFC 7617 HTTP Basic. Store the whole <c>user-id:password</c> string as the secret.</summary>
     public sealed class BasicAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
         #region Construction and state
@@ -32,14 +15,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private readonly IWebhookSecretProvider _secretProvider;
 
-        /// <summary>Creates an authenticator.</summary>
-        /// <param name="secretProvider">Where the expected <c>user-id:password</c> credential comes from.</param>
-        /// <param name="realm">Realm for <see cref="Challenge"/>. Defaults to <c>webhook</c>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="secretProvider"/> is null.</exception>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="realm"/> is blank or contains a quote, backslash or control character —
-        /// which would corrupt or split the <c>WWW-Authenticate</c> header.
-        /// </exception>
+        /// <summary>Creates an authenticator. Realm is for the 401 challenge only.</summary>
         public BasicAuthenticator(IWebhookSecretProvider secretProvider, string realm = "webhook")
         {
             if (string.IsNullOrWhiteSpace(realm))

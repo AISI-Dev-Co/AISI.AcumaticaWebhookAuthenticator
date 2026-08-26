@@ -4,15 +4,7 @@ using System;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The <c>NONE</c> scheme: every request authenticates.
-    /// </summary>
-    /// <remarks>
-    /// Exists so that "no authentication" is a decision somebody wrote down — visible in
-    /// configuration and traces — rather than the silent result of not wiring an authenticator up.
-    /// An endpoint using it accepts any payload from anyone who discovers the URL. It consumes no
-    /// secret, so unlike every other scheme there is nothing to fail closed on.
-    /// </remarks>
+    /// <summary>Every request authenticates. Use only as an explicit, recorded decision.</summary>
     public sealed class NoneAuthenticator : IWebhookAuthenticator
     {
         private NoneAuthenticator()

@@ -6,15 +6,7 @@ using AISI.AcumaticaWebhookAuthenticator.Configuration;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The <c>SECRET</c> scheme: the sender puts the shared secret itself in a header.
-    /// </summary>
-    /// <remarks>
-    /// The weakest scheme that still authenticates anything: the credential is not bound to the
-    /// request, so anyone who observes it can replay it against any payload. It exists for senders
-    /// that offer nothing better than "we will send header X with value Y"; prefer HMAC whenever
-    /// the sender supports it. Immutable and safe to share across threads.
-    /// </remarks>
+    /// <summary>The sender puts the shared secret itself in a header. Prefer HMAC when the sender can sign.</summary>
     public sealed class SharedSecretAuthenticator : IWebhookAuthenticator
     {
         private readonly IWebhookSecretProvider _secretProvider;
@@ -22,11 +14,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private readonly CredentialVerifier.TryDecode _decode;
 
         /// <summary>Creates an authenticator.</summary>
-        /// <param name="secretProvider">Where the expected secret comes from.</param>
-        /// <param name="secretHeader">Header carrying the secret, e.g. <c>X-Api-Key</c>.</param>
-        /// <param name="prefix">Prefix the sender puts in front of the secret, or null.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="secretProvider"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="secretHeader"/> is null or blank.</exception>
         public SharedSecretAuthenticator(
             IWebhookSecretProvider secretProvider,
             string secretHeader,

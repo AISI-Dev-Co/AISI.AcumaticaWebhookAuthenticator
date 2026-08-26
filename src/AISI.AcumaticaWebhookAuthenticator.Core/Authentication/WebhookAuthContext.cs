@@ -5,37 +5,7 @@ using System.Collections.Generic;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The inbound request as an authenticator sees it.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <see cref="Body"/> is the <em>raw bytes as they arrived</em>. Signature verification is
-    /// performed against this buffer and nothing else. Deserialising the payload and re-serialising
-    /// it produces different bytes — different key order, different whitespace, different number
-    /// formatting — and breaks every HMAC scheme in existence. Read the body once, verify against the
-    /// buffer, deserialise from the same buffer.
-    /// </para>
-    /// <para>
-    /// Headers are multi-valued, mirroring the <c>StringValues</c> that
-    /// <c>PX.Api.Webhooks.WebhookRequest.Headers</c> exposes. A repeated header therefore arrives
-    /// intact rather than folded into one string and split apart again downstream.
-    /// </para>
-    /// <para>
-    /// <see cref="Body"/> is <em>not</em> defensively copied, unlike the key material in
-    /// <see cref="Configuration.WebhookSecret"/>. The asymmetry is deliberate: a copy per request
-    /// would double the allocation and memory traffic of every payload the ERP receives, and unlike
-    /// a secret the body is neither confidential to this library nor long-lived. The contract that
-    /// falls out of it is that <strong>the caller must not mutate the array after handing it over,
-    /// and must not share it with anything that might</strong>. Mutating it between verification and
-    /// deserialisation would mean executing a payload that no signature covered.
-    /// </para>
-    /// <para>
-    /// This type deliberately has no dependency on Acumatica or ASP.NET. The adapter assembly builds
-    /// one of these from the platform's request object, which keeps the whole authentication surface
-    /// unit-testable without an ERP instance.
-    /// </para>
-    /// </remarks>
+    /// <summary>Inbound request as authenticators see it. <see cref="Body"/> is the raw arrival bytes, not a copy.</summary>
     public sealed class WebhookAuthContext
     {
         #region Construction and state
@@ -43,25 +13,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private readonly Dictionary<string, IReadOnlyList<string>> _headers;
 
-        /// <summary>
-        /// Creates a context from multi-valued headers. This is the shape the platform provides and
-        /// the one an adapter should use.
-        /// </summary>
-        /// <param name="body">
-        /// Raw request body bytes, exactly as received. Retained by reference, not copied — see the
-        /// remarks on this type for the obligation that creates.
-        /// </param>
-        /// <param name="headers">
-        /// Request headers. Matched case-insensitively regardless of the comparer on the dictionary
-        /// passed in.
-        /// </param>
-        /// <param name="method">HTTP method, e.g. "POST". Optional; only needed by templates using <c>{method}</c>.</param>
-        /// <param name="path">Request path. Optional; only needed by templates using <c>{path}</c>.</param>
-        /// <param name="receivedOn">
-        /// When the request arrived. Supplied rather than read from the clock so that replay-window
-        /// behaviour is deterministic under test.
-        /// </param>
-        /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="headers"/> is null.</exception>
+        /// <summary>Creates a context from multi-valued headers.</summary>
         public WebhookAuthContext(
             byte[] body,
             IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
@@ -86,16 +38,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
-        /// <summary>
-        /// Creates a context from single-valued headers, for callers that have already flattened
-        /// them.
-        /// </summary>
-        /// <param name="body">Raw request body bytes, exactly as received.</param>
-        /// <param name="headers">Request headers, one value each.</param>
-        /// <param name="method">HTTP method. Optional.</param>
-        /// <param name="path">Request path. Optional.</param>
-        /// <param name="receivedOn">When the request arrived.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="headers"/> is null.</exception>
+        /// <summary>Creates a context from single-valued headers.</summary>
         public WebhookAuthContext(
             byte[] body,
             IReadOnlyDictionary<string, string> headers,

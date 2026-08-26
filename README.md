@@ -32,8 +32,8 @@ database, maintained by an administrator on its own screen.
 
 ## Features
 
-- **Six schemes** — HMAC, HMAC with replay window, shared secret, HTTP Basic, explicit none;
-  presets for GitHub, Shopify and Stripe, and a template language for everything else
+- **Schemes** — HMAC, HMAC with replay window, HMAC JWT (HS256/HS512), shared secret, HTTP Basic, explicit none;
+  presets for GitHub, Shopify, Stripe and Bearer JWT, plus a template language for other HMAC senders
 - **Secrets managed in the ERP** — encrypted `[PXRSACryptString]` storage, a Modern UI
   maintenance screen (AS301000), per-webhook secrets, edits live within 30 seconds, no restart
 - **Zero-downtime secret rotation** — old and new secrets accepted until the overlap you set
@@ -90,12 +90,21 @@ dotnet build src/AISI.AcumaticaWebhookAuthenticator.Core -c Release
 | `SECRET` | `SharedSecretAuthenticator` | the shared secret itself in a header |
 | `BASIC` | `BasicAuthenticator` | RFC 7617 `Authorization: Basic` |
 | `NONE` | `NoneAuthenticator.Instance` | nothing — an explicit, recorded decision |
-| `JWT` | *planned* | |
+| `JWT` | `JwtAuthenticator` | HMAC-signed compact JWT (`HS256` / `HS512`) |
 
 `SECRET` and `BASIC` credentials are not bound to the request: anyone who observes one can replay
 it against any payload. They exist for senders that offer nothing better — prefer HMAC whenever
 the sender supports it. For `BASIC` the stored secret is the whole `user:password` string, and
 the 401 carries the RFC 7235 `WWW-Authenticate` challenge.
+
+HMAC JWT uses the stored secret as the HS256/HS512 key (`exp` required unless you turn that off).
+`iss` / `aud` are optional exact matches. RS256 is not implemented — that would pull
+`Microsoft.IdentityModel.*` into the site `Bin`.
+
+```csharp
+protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =>
+    new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secrets));
+```
 
 ### Presets
 
@@ -104,6 +113,7 @@ the 401 carries the RFC 7235 `WWW-Authenticate` challenge.
 | `WebhookAuthPresets.GitHub` | `X-Hub-Signature-256` | hex, `sha256=` prefix | body |
 | `WebhookAuthPresets.Shopify` | `X-Shopify-Hmac-Sha256` | base64 | body |
 | `WebhookAuthPresets.Stripe` | `Stripe-Signature` | hex, `t=`/`v1=` list | `{timestamp}.{body}` |
+| `WebhookAuthPresets.JwtBearer` | `Authorization: Bearer` | JWT compact, HS256 | header + payload (RFC 7515) |
 
 ### Custom senders
 
@@ -215,8 +225,6 @@ both supported versions — the receipts are in [docs/framework-notes.md](docs/f
 
 ## Roadmap
 
-- JWT scheme (the real work is `Microsoft.IdentityModel.*` binding redirects against a site's
-  `Bin`, not the token logic)
 - Retries — redelivery handling for payloads whose processing failed after authenticating
 - Full payload capture to Acumatica's webhook request record, so the platform's built-in request
   log carries the complete verified body

@@ -6,14 +6,7 @@ using System.Text;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>
-    /// Encodes and decodes signature digests.
-    /// </summary>
-    /// <remarks>
-    /// Decoding is deliberately not constant-time. The value being decoded is the signature supplied
-    /// by the caller, which is attacker-controlled and public; only the comparison against the
-    /// computed digest needs timing protection. See <see cref="FixedTimeComparer"/>.
-    /// </remarks>
+    /// <summary>Hex / base64 encoding for signature digests.</summary>
     public static class SignatureCodec
     {
         #region Encoding and decoding

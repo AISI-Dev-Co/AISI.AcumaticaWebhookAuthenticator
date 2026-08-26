@@ -12,16 +12,7 @@ using WebHook = PX.Api.Webhooks.DAC.WebHook;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 {
-    /// <summary>
-    /// The signing secret and IP allowlist for one webhook registration, one row per
-    /// <c>WebHook</c> row.
-    /// </summary>
-    /// <remarks>
-    /// Secrets use <c>[PXRSACryptString]</c>, Acumatica's own pattern for integration credentials:
-    /// encrypted at rest with the site certificate, admin-editable without redeployment, SaaS-safe.
-    /// The handler type stays in <c>WebHook.Handler</c> and the scheme in the handler's code —
-    /// duplicating either here would create a second copy to drift.
-    /// </remarks>
+    /// <summary>Signing secret and IP allowlist for one webhook registration.</summary>
     [Serializable]
     [PXCacheName("Webhook Secret")]
     public class AISIWebhookSecret : PXBqlTable, IBqlTable
@@ -31,14 +22,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// </summary>
         public const int SecretLength = 255;
 
-        /// <summary>
-        /// The crypt columns' storage length. Ciphertext is several times the plaintext —
-        /// <c>[PXRSACryptString]</c> stores base64 over UTF-16 bytes (~2.7×) and RSA block
-        /// padding adds more — so the column is budgeted for a <see cref="SecretLength"/>-char
-        /// plaintext under site keys up to 4096 bits (1368 chars), not for the plaintext itself.
-        /// A 255-length column truncated any secret past ~94 characters into unverifiable
-        /// garbage, silently.
-        /// </summary>
+        /// <summary>Crypt column size. Ciphertext is ~2.7× plaintext plus RSA padding; 255 is not enough.</summary>
         public const int SecretColumnLength = 2048;
 
         #region WebHookID
@@ -75,13 +59,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region RotatingExpiresOn
-        /// <summary>
-        /// When the rotation overlap ends, in UTC. After this instant the rotating secret is no
-        /// longer accepted, so a forgotten rotation closes itself. <c>UseTimeZone = false</c> is
-        /// load-bearing: the attribute's default converts through the session timezone on save
-        /// and the webhook scope's timezone on read, which would shift a labeled-UTC instant by
-        /// hours in each direction.
-        /// </summary>
+        /// <summary>When the rotating secret stops being accepted. <c>UseTimeZone = false</c> is required — the default would shift this UTC instant.</summary>
         [PXDBDateAndTime(UseTimeZone = false, DisplayNameDate = "Rotation Ends (UTC)", DisplayNameTime = "Rotation End Time (UTC)")]
         [PXUIField(DisplayName = "Rotation Ends (UTC)")]
         public virtual DateTime? RotatingExpiresOn { get; set; }

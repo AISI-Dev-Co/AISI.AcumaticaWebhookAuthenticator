@@ -12,7 +12,11 @@
     <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Core</AssemblyName>
     <RootNamespace>AISI.AcumaticaWebhookAuthenticator</RootNamespace>
     <PackageId>AISI.AcumaticaWebhookAuthenticator.Core</PackageId>
-    <Description>Inbound webhook authentication for Acumatica ERP: HMAC signature verification, signed-payload templates, replay windows and secret rotation.</Description>
+    <Description>Inbound webhook authentication for Acumatica ERP: HMAC, JWT (HS256/HS512), signed-payload templates, replay windows and secret rotation.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AISI.AcumaticaWebhookAuthenticator.Core.Tests" />
+  </ItemGroup>
 
 </Project>
