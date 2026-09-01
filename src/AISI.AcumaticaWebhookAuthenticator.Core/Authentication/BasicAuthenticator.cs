@@ -5,7 +5,22 @@ using AISI.AcumaticaWebhookAuthenticator.Configuration;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>RFC 7617 HTTP Basic. Store the whole <c>user-id:password</c> string as the secret.</summary>
+    /// <summary>
+    /// The <c>BASIC</c> scheme: RFC 7617 HTTP Basic authentication over the <c>Authorization</c>
+    /// header.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The secret is the <em>whole</em> <c>user-id:password</c> credential as one value —
+    /// compared in one fixed-time operation. Replayable by anyone who observes it, like
+    /// <c>SECRET</c>; for senders that offer Basic and nothing better.
+    /// </para>
+    /// <para>
+    /// On a 401 the host should send <see cref="Challenge"/>. The realm is interpolated into
+    /// <c>WWW-Authenticate</c>; quotes, backslashes and control characters are rejected at
+    /// construction because they would corrupt or split the header.
+    /// </para>
+    /// </remarks>
     public sealed class BasicAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
         #region Construction and state
@@ -15,7 +30,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private readonly IWebhookSecretProvider _secretProvider;
 
-        /// <summary>Creates an authenticator. Realm is for the 401 challenge only.</summary>
+        /// <summary>Creates an authenticator.</summary>
+        /// <param name="secretProvider">Where the expected <c>user-id:password</c> credential comes from.</param>
+        /// <param name="realm">Realm for <see cref="Challenge"/>. Defaults to <c>webhook</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="secretProvider"/> is null.</exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="realm"/> is blank or contains a quote, backslash or control character —
+        /// which would corrupt or split the <c>WWW-Authenticate</c> header.
+        /// </exception>
         public BasicAuthenticator(IWebhookSecretProvider secretProvider, string realm = "webhook")
         {
             if (string.IsNullOrWhiteSpace(realm))

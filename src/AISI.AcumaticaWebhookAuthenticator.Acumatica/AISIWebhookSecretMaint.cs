@@ -9,18 +9,12 @@ using PX.Data.BQL.Fluent;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>Webhook secrets screen (AS301000). Stored values are write-only.</summary>
-    public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint>
+    public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint, AISIWebhookSecret>
     {
         // The framework populates action and view members by reflection during graph
         // construction; the null-forgiving initialisers acknowledge that, they do not perform it.
 
         #region Views and actions
-        /// <summary>Standard Cancel.</summary>
-        public PXCancel<AISIWebhookSecret> Cancel = null!;
-
-        /// <summary>Standard Save.</summary>
-        public PXSave<AISIWebhookSecret> Save = null!;
-
         /// <summary>All webhook secrets.</summary>
         public SelectFrom<AISIWebhookSecret>.View Secrets = null!;
         #endregion
@@ -74,7 +68,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// </summary>
         protected virtual void _(Events.RowPersisting<AISIWebhookSecret> e)
         {
-            if (e.Row is null)
+            if (e.Row is null || e.Operation == PXDBOperation.Delete)
             {
                 return;
             }

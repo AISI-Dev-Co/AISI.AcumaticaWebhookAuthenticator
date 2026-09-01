@@ -5,7 +5,28 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>Builder for HMAC verification. Snapshot it into <see cref="Authentication.HmacAuthenticator"/> and stop mutating it.</summary>
+    /// <summary>
+    /// Everything needed to verify an HMAC-signed webhook.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This type is mutable and is not thread-safe. Build it, hand it to an authenticator,
+    /// and stop touching it.</strong> The mutable properties exist for the object-initializer syntax
+    /// that makes a scheme readable at a glance; they are not a live configuration channel.
+    /// </para>
+    /// <para>
+    /// <see cref="Authentication.HmacAuthenticator"/> copies every value it needs in its constructor
+    /// and never reads this object again. Assignments after construction are silently ignored.
+    /// Sharing one instance across several authenticators freezes each at whatever it read. Mutating
+    /// on one thread while constructing on another can produce a configuration that never coherently
+    /// existed — in particular a <see cref="Template"/> / <see cref="Timestamp"/> pair where the
+    /// replay window does not cover the timestamp the template signs.
+    /// </para>
+    /// <para>
+    /// The authenticator built from these options is immutable and safe to share across threads. It
+    /// is the object to hold onto; this one is scaffolding.
+    /// </para>
+    /// </remarks>
     public sealed class HmacAuthOptions
     {
         #region Construction
@@ -55,7 +76,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Validation
-        /// <summary>A developer-facing reason this configuration cannot work, or null.</summary>
+        /// <summary>
+        /// Describes what is wrong with this configuration, or <see langword="null"/> when it is
+        /// coherent. A replay window over a timestamp the template does not sign is rejected here.
+        /// </summary>
         public string? DescribeMisconfiguration()
         {
             if (Template is null)
