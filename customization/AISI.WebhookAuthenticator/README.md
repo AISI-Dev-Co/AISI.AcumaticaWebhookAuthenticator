@@ -38,11 +38,13 @@ The release workflow fails if the committed DLL's assembly version does not matc
 `Directory.Build.props`. Known limitation: the gate catches a version bump without a rebuild, not
 a code change without a version bump — bump the version whenever the adapter changes.
 
-## Site map URL and tenants
+## Site map URL
 
-The site map node points at `~/Scripts/Screens/WarrantyClaim/AS301000.html` — the *tenant-scoped*
-compiled output, and `WarrantyClaim` is the reference instance's tenant login name. On an
-instance with a different tenant name, publish compiles the screen to
-`Scripts/Screens/{ThatTenant}/` and the URL needs the same adjustment (Site Map, SM200520) after
-the first publish. Verified behaviour on 2026 R1: publishing runs the screen webpack build with
-`--env tenant={Tenant}` itself; no manual frontend build is needed.
+The site map node uses the tenant-agnostic Pages URL `~/Pages/AS/AS301000.aspx`. Access rights
+grant Delete (4) to Administrator and Customizer only — the package does not ship a foreign
+tenant role catalog. Publishing still compiles the Modern UI from the `PerTenantFile` HTML/TS;
+no manual frontend build is needed.
+
+The committed adapter DLL is the 25R2-floor binary. JWT lives in Core (built by CI). Adapter
+source on this branch (graph `PXGraph<,TPrimary>`, DAC PK/FK, handler catch, mapper webhook id,
+XML remarks) is the source of truth and is not a 26.100 rebuild of that DLL.
