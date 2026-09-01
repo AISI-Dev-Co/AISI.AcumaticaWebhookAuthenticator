@@ -70,7 +70,7 @@ Grab both artifacts from the [latest release](https://github.com/AISI-Dev-Co/AIS
 ```sh
 git clone https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator
 cd AISI.AcumaticaWebhookAuthenticator
-dotnet build -c Release -p:AcumaticaBinPath="C:\\AcumaticaSites\\MySite\\Bin"
+dotnet build -c Release -p:AcumaticaBinPath="C:\AcumaticaSites\MySite\Bin"
 ```
 
 `AcumaticaBinPath` (or the `ACUMATICA_BIN` environment variable) points the Acumatica adapter at
@@ -116,7 +116,7 @@ var options = new HmacAuthOptions(secretProvider, signatureHeader: "X-Signature"
     Encoding = SignatureEncoding.Base64,          // Hex, Base64
     SignaturePrefix = "v1=",
     Extraction = SignatureExtraction.Whole,       // or KeyValueElement("v1") for compound headers
-    Template = SignedPayloadTemplate.Parse("{method}\\n{timestamp}\\n{body}"),
+    Template = SignedPayloadTemplate.Parse("{method}\n{timestamp}\n{body}"),
     Timestamp = TimestampValidation.FromHeader("X-Timestamp", TimeSpan.FromMinutes(5)),
 };
 ```
