@@ -6,7 +6,7 @@ Report vulnerabilities **privately**. Do not open a public issue for a suspected
 
 Open **Security → Advisories → New draft security advisory** on this repository.
 
-Include the Acumatica version, the scheme (`HMAC` / `HMACTS` / `SECRET` / `BASIC` / `JWT` / `NONE`), and whether a sender can distinguish failure modes.
+Include the Acumatica version, the scheme (`HMAC` / `HMACTS` / `SECRET` / `BASIC` / `NONE`), and whether a sender can distinguish failure modes.
 
 ## Please do not
 
