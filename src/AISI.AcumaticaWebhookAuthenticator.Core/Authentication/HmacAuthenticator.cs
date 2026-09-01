@@ -8,7 +8,24 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>HMAC over a templated payload; with a timestamp this is the <c>HMACTS</c> scheme.</summary>
+    /// <summary>
+    /// Verifies an HMAC signature over a templated payload, optionally inside a replay window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Covers both the <c>HMAC</c> and <c>HMACTS</c> schemes. They differ only in whether a
+    /// timestamp participates, so they are one implementation rather than two near-identical ones;
+    /// <see cref="Code"/> still reports them separately.
+    /// </para>
+    /// <para>
+    /// The configuration is snapshotted at construction. <see cref="HmacAuthOptions"/> is a mutable
+    /// object-initializer bag, and reading it per request would let a later assignment to
+    /// <see cref="HmacAuthOptions.Template"/> or <see cref="HmacAuthOptions.Timestamp"/> walk
+    /// straight past the constructor's coherence check — which is precisely the check standing
+    /// between a replay window and a timestamp nothing signs. Instances are immutable and safe to
+    /// share across threads.
+    /// </para>
+    /// </remarks>
     public sealed class HmacAuthenticator : IWebhookAuthenticator, IRequestPathDependent
     {
         #region Construction and state
@@ -21,7 +38,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private readonly SignedPayloadTemplate _template;
         private readonly TimestampValidation? _timestamp;
 
-        /// <summary>Creates an authenticator. Options are snapshotted here and never read again.</summary>
+        /// <summary>
+        /// Creates an authenticator.
+        /// </summary>
+        /// <param name="options">Scheme configuration. Read once, here.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
+        /// <exception cref="ArgumentException">
+        /// The configuration is incoherent, as described by
+        /// <see cref="HmacAuthOptions.DescribeMisconfiguration"/>. Chiefly: a replay window over a
+        /// timestamp the template does not sign is security theatre, since the signature does not
+        /// cover it and a replayer rewrites it freely.
+        /// </exception>
         public HmacAuthenticator(HmacAuthOptions options)
         {
             if (options is null)
