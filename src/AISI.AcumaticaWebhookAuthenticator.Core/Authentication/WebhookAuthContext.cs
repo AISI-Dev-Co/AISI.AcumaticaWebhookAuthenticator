@@ -19,7 +19,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
             string? method,
             string? path,
-            DateTimeOffset receivedOn)
+            DateTimeOffset receivedOn,
+            Guid? webhookId = null)
         {
             if (headers is null)
             {
@@ -30,6 +31,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             Method = method;
             Path = path;
             ReceivedOn = receivedOn;
+            WebhookId = webhookId;
 
             _headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, IReadOnlyList<string>> header in headers)
@@ -44,8 +46,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             IReadOnlyDictionary<string, string> headers,
             string? method,
             string? path,
-            DateTimeOffset receivedOn)
-            : this(body, Widen(headers), method, path, receivedOn)
+            DateTimeOffset receivedOn,
+            Guid? webhookId = null)
+            : this(body, Widen(headers), method, path, receivedOn, webhookId)
         {
         }
         #endregion
@@ -65,6 +68,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         /// <summary>When the request arrived.</summary>
         public DateTimeOffset ReceivedOn { get; }
+
+        /// <summary>
+        /// The webhook registration this request arrived on, when the host surfaces one.
+        /// JWT audience binding uses this by default so a reused secret cannot cross webhooks.
+        /// </summary>
+        public Guid? WebhookId { get; }
 
         /// <summary>Request headers, matched case-insensitively.</summary>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers => _headers;

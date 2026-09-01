@@ -17,7 +17,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// Maps a request. The body must already have been read: the platform stream is
         /// forward-only, and the buffer that was verified is the buffer that gets processed.
         /// </summary>
-        public static WebhookAuthContext Map(WebhookRequest request, byte[] body, DateTimeOffset receivedOn)
+        public static WebhookAuthContext Map(WebhookRequest request, byte[] body, DateTimeOffset receivedOn, Guid webhookId)
         {
             if (request is null)
             {
@@ -44,7 +44,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             // Path is null: WebhookRequest has no path member, and handler construction rejects
             // {path} templates so it is never consulted.
-            return new WebhookAuthContext(body, headers, request.Method, null, receivedOn);
+            return new WebhookAuthContext(body, headers, request.Method, null, receivedOn, webhookId);
         }
     }
 }

@@ -12,11 +12,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
     /// </summary>
     internal sealed class RequestBuilder
     {
+        internal static readonly Guid DefaultWebhookId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
         private readonly Dictionary<string, IReadOnlyList<string>> _headers = new(StringComparer.OrdinalIgnoreCase);
         private byte[] _body = Array.Empty<byte>();
         private string? _method = "POST";
         private string? _path = "/api/webhooks/company/inbound";
         private DateTimeOffset _receivedOn = DateTimeOffset.UnixEpoch;
+        private Guid? _webhookId = DefaultWebhookId;
 
         public static RequestBuilder Post() => new();
 
@@ -83,7 +86,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             return this;
         }
 
+        public RequestBuilder ForWebhook(Guid webhookId)
+        {
+            _webhookId = webhookId;
+            return this;
+        }
+
+        public RequestBuilder WithoutWebhookId()
+        {
+            _webhookId = null;
+            return this;
+        }
+
         public WebhookAuthContext Build() =>
-            new(_body, _headers, _method, _path, _receivedOn);
+            new(_body, _headers, _method, _path, _receivedOn, _webhookId);
     }
 }
