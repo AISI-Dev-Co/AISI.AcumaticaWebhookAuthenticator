@@ -7,12 +7,56 @@ using System.Threading;
 using System.Threading.Tasks;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
+using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 using PX.Api.Webhooks;
 using PX.Data;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>Authenticates the request, then runs <see cref="ProcessAsync"/>. Secrets are per webhook registration.</summary>
+    /// <summary>
+    /// An <see cref="IWebhookHandler"/> that authenticates the request before any consumer code
+    /// sees it. Inherit, say how to authenticate, and implement the business logic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <example>
+    /// A GitHub-signed webhook whose secret an administrator maintains on the webhook secrets
+    /// screen:
+    /// <code>
+    /// public class PushEventHandler : AuthenticatedWebhookHandlerBase
+    /// {
+    ///     protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =&gt;
+    ///         new HmacAuthenticator(WebhookAuthPresets.GitHub(secrets));
+    ///
+    ///     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
+    ///     {
+    ///         // context.Body is the request body. HMAC schemes verified those bytes;
+    ///         // SECRET / BASIC / NONE / unbound JWT did not.
+    ///     }
+    /// }
+    /// </code>
+    /// </example>
+    /// </para>
+    /// <para>
+    /// The secret provider handed to <see cref="CreateAuthenticator"/> is keyed to the webhook
+    /// registration the request arrived on (<c>WebhookDefinition.Id</c> =
+    /// <c>WebHook.WebHookID</c>), so one handler type registered under several webhooks gets a
+    /// separate secret per registration, uniformly stored, with no per-handler storage code.
+    /// </para>
+    /// <para>
+    /// The platform constructs a fresh handler instance per request, so the authenticator map is
+    /// static, keyed by handler type and webhook registration: one authenticator is built on a
+    /// registration's first request and reused process-wide. A misconfiguration — an incoherent
+    /// option set, a <c>{path}</c> template — therefore throws on the first request rather than at
+    /// deploy time; it throws loudly and on every request, rather than denying quietly, because a
+    /// developer error should read as one and not as a sender problem.
+    /// </para>
+    /// <para>
+    /// Authentication failures are uniform: same 401, same generic body, whatever the reason. The
+    /// specific <see cref="Diagnostics.AuthFailureCode"/> goes to <see cref="PXTrace"/> only. A
+    /// 401 that distinguished "malformed" from "mismatched" would be a decision oracle.
+    /// </para>
+    /// </remarks>
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
     {
         #region Construction and state
@@ -55,7 +99,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>
         /// The business logic. Runs only after the request authenticated.
         /// </summary>
-        /// <param name="context">The platform context plus the verified body buffer.</param>
+        /// <param name="context">The platform context plus the request body buffer. Signature coverage depends on the scheme.</param>
         /// <param name="cancellation">The cancellation token.</param>
         protected abstract Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation);
 
@@ -112,9 +156,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             WebhookAuthContext authContext = WebhookRequestMapper.Map(
                 context.Request,
                 read.Body,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                context.Definition.Id);
 
-            AuthResult result = authenticator.Authenticate(authContext);
+            AuthResult result;
+            try
+            {
+                result = authenticator.Authenticate(authContext);
+            }
+            catch (Exception)
+            {
+                // Signed junk and overflowed timestamps must be 401, never 500.
+                PXTrace.WriteWarning(
+                    "Webhook authentication threw (scheme {0}, webhook {1}, trace {2}).",
+                    authenticator.Code,
+                    context.Definition.Id,
+                    context.TraceIdentifier);
+                result = AuthResult.Fail(AuthFailureCode.Unspecified);
+            }
 
             if (!result.Succeeded)
             {

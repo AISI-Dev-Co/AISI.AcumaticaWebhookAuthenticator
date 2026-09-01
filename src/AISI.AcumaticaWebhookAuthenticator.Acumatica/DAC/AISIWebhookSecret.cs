@@ -25,6 +25,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         /// <summary>Crypt column size. Ciphertext is ~2.7× plaintext plus RSA padding; 255 is not enough.</summary>
         public const int SecretColumnLength = 2048;
 
+        /// <summary>Primary key: one secret row per webhook registration.</summary>
+        public class PK : PrimaryKeyOf<AISIWebhookSecret>.By<webHookID>
+        {
+            public static AISIWebhookSecret Find(PXGraph graph, Guid? webHookID, PKFindOptions options = PKFindOptions.None) =>
+                FindBy(graph, webHookID, options);
+        }
+
+        /// <summary>Foreign keys.</summary>
+        public static class FK
+        {
+            /// <summary>The webhook registration this secret belongs to.</summary>
+            public class WebHookRegistration : WebHook.PK.ForeignKeyOf<AISIWebhookSecret>.By<webHookID>
+            {
+            }
+        }
+
         #region WebHookID
         /// <summary>The webhook registration this secret belongs to.</summary>
         [PXDBGuid(IsKey = true)]
