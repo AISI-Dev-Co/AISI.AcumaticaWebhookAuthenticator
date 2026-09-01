@@ -100,6 +100,24 @@ jobs:
             artifacts/*.nupkg
             artifacts/AISI.WebhookAuthenticator.zip
 
+      # nuget.org is the install path VARs actually use. The key lives in the repo's
+      # NUGET_API_KEY Actions secret — never in the tree. Missing secret skips the push
+      # rather than failing the GitHub Release; the nupkg is still attached below.
+      - name: Publish to nuget.org
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "::warning::NUGET_API_KEY secret is not set; skipping nuget.org. Add it under Settings → Secrets and variables → Actions, then re-run this tag workflow."
+            exit 0
+          fi
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
