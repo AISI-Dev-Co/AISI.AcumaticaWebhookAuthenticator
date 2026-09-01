@@ -13,6 +13,13 @@
     <RootNamespace>AISI.AcumaticaWebhookAuthenticator</RootNamespace>
     <PackageId>AISI.AcumaticaWebhookAuthenticator.Core</PackageId>
     <Description>Inbound webhook authentication for Acumatica ERP: HMAC signature verification, signed-payload templates, replay windows and secret rotation.</Description>
+    <PackageTags>acumatica;erp;webhooks;hmac;authentication</PackageTags>
+    <PackageProjectUrl>https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>

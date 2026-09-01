@@ -220,7 +220,11 @@ both supported versions — the receipts are in [docs/framework-notes.md](docs/f
 - Retries — redelivery handling for payloads whose processing failed after authenticating
 - Full payload capture to Acumatica's webhook request record, so the platform's built-in request
   log carries the complete verified body
-- nuget.org publication
+- nuget.org publication on version tags — add a `NUGET_API_KEY` Actions secret to enable the
+  push (the nupkg is already a Release asset)
+
+> Need this published on a SaaS tenant, wired to a live sender, or extended past this scope?
+> [AISI Dev Co](https://github.com/AISI-Dev-Co) does scoped Acumatica customisation for VARs.
 
 ## Contributing
 
