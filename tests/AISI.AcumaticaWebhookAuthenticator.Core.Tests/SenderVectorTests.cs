@@ -283,7 +283,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             string jwt = JwtAuthenticator.Compact(
                 Signing.HmacAlgorithm.Sha256,
                 System.Text.Encoding.UTF8.GetBytes(secret),
-                "{\"exp\":1700003600,\"iss\":\"hooks\"}");
+                "{\"exp\":1700003600,\"iss\":\"hooks\",\"aud\":\"" + RequestBuilder.DefaultWebhookId.ToString("D") + "\",\"bh\":\"" + JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(System.Array.Empty<byte>())) + "\"}");
 
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(received)
@@ -302,7 +302,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             string jwt = JwtAuthenticator.Compact(
                 Signing.HmacAlgorithm.Sha256,
                 System.Text.Encoding.UTF8.GetBytes(secret),
-                "{\"exp\":1700003600}");
+                "{\"exp\":1700003600,\"aud\":\"" + RequestBuilder.DefaultWebhookId.ToString("D") + "\",\"bh\":\"" + JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(System.Array.Empty<byte>())) + "\"}");
             string[] parts = jwt.Split('.');
             string tampered = parts[0] + "." +
                 JwtAuthenticator.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes("{\"exp\":9999999999}")) +
