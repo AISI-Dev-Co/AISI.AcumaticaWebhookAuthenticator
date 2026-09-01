@@ -69,7 +69,7 @@ Grab both artifacts from the [latest release](https://github.com/AISI-Dev-Co/AIS
 ```sh
 git clone https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator
 cd AISI.AcumaticaWebhookAuthenticator
-dotnet build -c Release -p:AcumaticaBinPath="C:\\AcumaticaSites\\MySite\\Bin"
+dotnet build -c Release -p:AcumaticaBinPath="C:\AcumaticaSites\MySite\Bin"
 ```
 
 `AcumaticaBinPath` (or the `ACUMATICA_BIN` environment variable) points the Acumatica adapter at
