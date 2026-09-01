@@ -15,6 +15,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         private const string SecretText = "test-secret";
         private static readonly byte[] SecretBytes = Encoding.UTF8.GetBytes(SecretText);
         private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
+        private static readonly string EmptyBodyBh =
+            JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(Array.Empty<byte>()));
+        private static readonly string DefaultAud = RequestBuilder.DefaultWebhookId.ToString("D");
 
         private static JwtAuthenticator Bearer(Action<JwtAuthOptions>? configure = null)
         {
@@ -29,7 +32,59 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         private static string FutureExpPayload(string extra = "")
         {
             long exp = Now.ToUnixTimeSeconds() + 3600;
-            return "{\"exp\":" + exp + extra + "}";
+            return "{\"exp\":" + exp +
+                ",\"aud\":\"" + DefaultAud + "\"" +
+                ",\"bh\":\"" + EmptyBodyBh + "\"" +
+                extra + "}";
+        }
+
+        private static string Sign(string headerJson, string payloadJson, byte[]? key = null)
+        {
+            string header = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
+            string payload = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
+            byte[] signature = HmacComputer.Compute(
+                HmacAlgorithm.Sha256,
+                key ?? SecretBytes,
+                Encoding.ASCII.GetBytes(header + "." + payload));
+            return header + "." + payload + "." + JwtAuthenticator.Base64UrlEncode(signature);
+        }
+
+        [Fact]
+        public void Rfc7515AppendixA1_Hs256Vector_Authenticates()
+        {
+            // RFC 7515 appendix A.1. Hardcoded: do not mint this token via Compact.
+            const string jwt =
+                "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9." +
+                "eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ." +
+                "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+            const string keyB64Url =
+                "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
+
+            string padded = keyB64Url.Replace('-', '+').Replace('_', '/');
+            switch (padded.Length % 4)
+            {
+                case 2:
+                    padded += "==";
+                    break;
+                case 3:
+                    padded += "=";
+                    break;
+            }
+
+            byte[] key = Convert.FromBase64String(padded);
+            var authenticator = new JwtAuthenticator(
+                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromBytes(key)))
+                {
+                    RequireBodyHash = false,
+                    BindAudienceToWebhookId = false,
+                });
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(DateTimeOffset.FromUnixTimeSeconds(1_300_819_300))
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            Assert.True(authenticator.Authenticate(request).Succeeded);
         }
 
         [Fact]
@@ -42,6 +97,131 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 .Build();
 
             Assert.True(Bearer().Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void ValidJwt_TamperedBody_FailsWhenBodyBound()
+        {
+            byte[] original = Encoding.UTF8.GetBytes("{\"ok\":true}");
+            string bh = JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(original));
+            long exp = Now.ToUnixTimeSeconds() + 3600;
+            string jwt = Token(
+                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + bh + "\"}");
+
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithBody("tampered")
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtBodyHashMismatch, result.FailureCode);
+        }
+
+        [Fact]
+        public void OverflowExp_IsUnauthorizedRatherThanThrown()
+        {
+            string jwt = Token(
+                "{\"exp\":" + long.MaxValue +
+                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
+        }
+
+        [Fact]
+        public void EmptySignatureWithHs256_IsRejected()
+        {
+            string jwt = Token(FutureExpPayload());
+            string[] parts = jwt.Split('.');
+            string emptySig = parts[0] + "." + parts[1] + ".";
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + emptySig)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
+        }
+
+        [Fact]
+        public void CritHeader_IsRejected()
+        {
+            string jwt = Sign(
+                "{\"alg\":\"HS256\",\"typ\":\"JWT\",\"crit\":[\"b64\"]}",
+                FutureExpPayload());
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtCriticalHeader, result.FailureCode);
+        }
+
+        [Fact]
+        public void DuplicateAlgKey_IsRejected()
+        {
+            string jwt = Sign(
+                "{\"alg\":\"HS256\",\"alg\":\"none\"}",
+                FutureExpPayload());
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
+        }
+
+        [Fact]
+        public void UnhandledJsonEscape_IsRejected()
+        {
+            string jwt = Sign(
+                "{\"alg\":\"HS256\",\"x\":\"\\q\"}",
+                FutureExpPayload());
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
+        }
+
+        [Fact]
+        public void OversizedToken_IsRejected()
+        {
+            var padding = new string('a', 9000);
+            string jwt = Token(
+                "{\"exp\":" + (Now.ToUnixTimeSeconds() + 3600) +
+                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh +
+                "\",\"pad\":\"" + padding + "\"}");
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
         }
 
         [Fact]
@@ -92,7 +272,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void ExpiredToken_Fails()
         {
             long exp = Now.ToUnixTimeSeconds() - 120;
-            string jwt = Token("{\"exp\":" + exp + "}");
+            string jwt = Token(
+                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -108,7 +289,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void ExpiredWithinClockSkew_Succeeds()
         {
             long exp = Now.ToUnixTimeSeconds() - 30;
-            string jwt = Token("{\"exp\":" + exp + "}");
+            string jwt = Token(
+                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -120,7 +302,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void MissingExp_FailsWhenRequired()
         {
-            string jwt = Token("{\"sub\":\"x\"}");
+            string jwt = Token("{\"sub\":\"x\",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -135,7 +317,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void MissingExp_SucceedsWhenNotRequired()
         {
-            string jwt = Token("{\"sub\":\"x\"}");
+            string jwt = Token("{\"sub\":\"x\",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -149,7 +331,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         {
             long nbf = Now.ToUnixTimeSeconds() + 120;
             long exp = Now.ToUnixTimeSeconds() + 3600;
-            string jwt = Token("{\"exp\":" + exp + ",\"nbf\":" + nbf + "}");
+            string jwt = Token(
+                "{\"exp\":" + exp + ",\"nbf\":" + nbf +
+                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -164,7 +348,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void IssuerAndAudience_MustMatchWhenConfigured()
         {
-            string jwt = Token(FutureExpPayload(",\"iss\":\"sender\",\"aud\":[\"hook\",\"other\"]"));
+            long exp = Now.ToUnixTimeSeconds() + 3600;
+            string jwt = Token(
+                "{\"exp\":" + exp +
+                ",\"iss\":\"sender\",\"aud\":[\"hook\",\"other\"],\"bh\":\"" + EmptyBodyBh + "\"}");
             WebhookAuthContext request = RequestBuilder.Post()
                 .ReceivedAt(Now)
                 .WithHeader("Authorization", "Bearer " + jwt)
@@ -176,11 +363,31 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 o.Audience = "hook";
             }).Authenticate(request).Succeeded);
 
-            AuthResult badIss = Bearer(o => o.Issuer = "other").Authenticate(request);
+            AuthResult badIss = Bearer(o =>
+            {
+                o.Issuer = "other";
+                o.Audience = "hook";
+            }).Authenticate(request);
             Assert.Equal(AuthFailureCode.JwtIssuerMismatch, badIss.FailureCode);
 
             AuthResult badAud = Bearer(o => o.Audience = "missing").Authenticate(request);
             Assert.Equal(AuthFailureCode.JwtAudienceMismatch, badAud.FailureCode);
+        }
+
+        [Fact]
+        public void MissingWebhookId_FailsAudienceWhenBound()
+        {
+            string jwt = Token(FutureExpPayload());
+            WebhookAuthContext request = RequestBuilder.Post()
+                .WithoutWebhookId()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtAudienceMismatch, result.FailureCode);
         }
 
         [Fact]
@@ -281,7 +488,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
-        public void Preset_IsBearerHs256()
+        public void UnboundedClockSkew_IsRejectedAtConstruction()
+        {
+            var options = new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)))
+            {
+                ClockSkew = TimeSpan.FromDays(365),
+            };
+
+            Assert.Throws<ArgumentException>(() => new JwtAuthenticator(options));
+        }
+
+        [Fact]
+        public void Preset_IsBearerHs256BoundToWebhookAndBody()
         {
             JwtAuthOptions options = WebhookAuthPresets.JwtBearer(
                 new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)));
@@ -289,12 +507,28 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal("Authorization", options.TokenHeader);
             Assert.Equal("Bearer ", options.SchemePrefix);
             Assert.Equal(HmacAlgorithm.Sha256, options.Algorithm);
+            Assert.True(options.BindAudienceToWebhookId);
+            Assert.True(options.RequireBodyHash);
+            Assert.True(options.RequireExpiration);
         }
 
         [Fact]
         public void Challenge_IsRfc6750Bearer()
         {
             Assert.Equal("Bearer realm=\"webhook\"", Bearer().Challenge);
+        }
+
+        [Fact]
+        public void Challenge_MatchesCustomHeaderWhenThereIsNoSchemePrefix()
+        {
+            var options = new JwtAuthOptions(
+                new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)),
+                "X-Webhook-Token")
+            {
+                SchemePrefix = null,
+            };
+
+            Assert.Equal("X-Webhook-Token realm=\"webhook\"", new JwtAuthenticator(options).Challenge);
         }
     }
 }
