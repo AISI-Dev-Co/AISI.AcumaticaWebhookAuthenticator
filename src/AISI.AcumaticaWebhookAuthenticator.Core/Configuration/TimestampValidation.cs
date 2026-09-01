@@ -8,7 +8,16 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>Signed-timestamp source and replay window. The template must include <c>{timestamp}</c>.</summary>
+    /// <summary>
+    /// Where the signed timestamp comes from and how wide the replay window is.
+    /// </summary>
+    /// <remarks>
+    /// The timestamp is only meaningful when it is <em>inside the signed payload</em>. Validating a
+    /// timestamp the signature does not cover achieves nothing, because an attacker replaying a
+    /// captured request can rewrite it freely. <see cref="Authentication.HmacAuthenticator"/>
+    /// enforces the pairing at construction: configuring this without a <c>{timestamp}</c> token in
+    /// the template is rejected outright.
+    /// </remarks>
     public sealed class TimestampValidation
     {
         #region Construction and state
