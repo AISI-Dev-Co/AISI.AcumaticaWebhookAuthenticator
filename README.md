@@ -110,6 +110,8 @@ protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvi
     new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secrets));
 ```
 
+`JwtBearer(secrets)` keeps `RequireBodyHash` and `BindAudienceToWebhookId` on (claim `bh` + `aud` = webhook id). Do not start from a snippet that sets both to `false` — that is an unbound bearer, same class as `SECRET`/`BASIC`.
+
 ### Presets
 
 | Preset | Header | Encoding | Signs |
