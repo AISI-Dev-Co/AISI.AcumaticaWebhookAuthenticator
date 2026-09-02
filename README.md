@@ -7,10 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Webhook authentication for Acumatica ERP.** `PX.Api.Webhooks.IWebhookHandler` hands you a
-request and leaves authentication entirely to you — this library does the part everyone
-re-implements badly: HMAC verification over the raw request bytes, with the header names,
-encodings, prefixes and signed-payload conventions real senders use, plus admin-managed secrets
-in the ERP database.
+request and leaves authentication entirely to you. The first sample is Bearer JWT (`bh` +
+`aud` = webhook id). HMAC-over-body (GitHub / Shopify / Stripe presets) is the other family —
+same base class, admin-managed secrets in the ERP database.
 
 ```csharp
 public class PushEventHandler : AuthenticatedWebhookHandlerBase
@@ -48,19 +47,21 @@ database, maintained by an administrator on its own screen.
 
 ## Getting started
 
-Grab both artifacts from the [latest release](https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator/releases):
-`AISI.WebhookAuthenticator.zip` (the customization package) and the
-`AISI.AcumaticaWebhookAuthenticator.Core` NuGet package.
+GitHub Releases attach the Core nupkg. Ubuntu CI **does not** attach
+`AISI.WebhookAuthenticator.zip` — the runner has no Acumatica site Bin, so `release.yml`
+skips the zip rather than shipping a missing adapter. Pack the zip locally against a 2025 R2+
+`Bin` (`AcumaticaBinPath`).
 
-1. **Import and publish** `AISI.WebhookAuthenticator.zip` on the Customization Projects screen
-   (SM204505). Publishing creates the secrets table, registers the Webhook Secrets screen and its
-   access rights, and compiles the Modern UI — no manual SQL, no frontend build.
-2. **Write a handler** like the one above in your own customization or extension library,
-   referencing the two shipped assemblies (or the NuGet package for the core types).
-3. **Register the webhook** on the Webhooks screen (SM304000) with your handler's type name —
-   Acumatica gives you the endpoint URL.
-4. **Enter the secret** on the Webhook Secrets screen (AS301000) for that webhook. Done — requests
-   that don't verify never reach your code.
+1. **Core** — take `AISI.AcumaticaWebhookAuthenticator.Core` from the
+   [latest release](https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator/releases)
+   (or build `src/AISI.AcumaticaWebhookAuthenticator.Core`; no site required).
+2. **Customization zip** — pack `AISI.WebhookAuthenticator.zip` on a machine with a 25R2+ site
+   Bin. Import and publish it on SM204505: secrets table, Webhook Secrets screen, Modern UI.
+   Do not expect that zip on a GitHub Release built by ubuntu-latest.
+3. **Write a handler** like the one above, referencing Core (nupkg) plus the adapter when you
+   publish on the site.
+4. **Register the webhook** on SM304000 with your handler's type name.
+5. **Enter the secret** on AS301000. Requests that don't verify never reach your code.
 
 > **Note:** the packaged site map uses `~/Pages/AS/AS301000.aspx` (no tenant folder). See the
 > [package notes](customization/AISI.WebhookAuthenticator/README.md).
@@ -70,7 +71,7 @@ Grab both artifacts from the [latest release](https://github.com/AISI-Dev-Co/AIS
 ```sh
 git clone https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator
 cd AISI.AcumaticaWebhookAuthenticator
-dotnet build -c Release -p:AcumaticaBinPath="C:\\AcumaticaSites\\MySite\\Bin"
+dotnet build -c Release -p:AcumaticaBinPath="C:\AcumaticaSites\MySite\Bin"
 ```
 
 `AcumaticaBinPath` (or the `ACUMATICA_BIN` environment variable) points the Acumatica adapter at
