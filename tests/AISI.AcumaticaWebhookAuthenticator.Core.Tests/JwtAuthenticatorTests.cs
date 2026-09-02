@@ -79,6 +79,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
+        public void Utf8Strict_InvalidBytes_ThrowOnInvalidBytes()
+        {
+            // Replacement encoding would also make InvalidUtf8Header_IsJwtMalformed
+            // (JSON parse fail). Pin throwOnInvalidBytes so invalid UTF-8 never reaches JSON.
+            Assert.Throws<DecoderFallbackException>(
+                () => JwtAuthenticator.Utf8Strict.GetString(new byte[] { 0xFF, 0xFE }));
+        }
+
+        [Fact]
         public void Rfc7515AppendixA1_Hs256Vector_Authenticates()
         {
             // RFC 7515 appendix A.1 has no bh/aud. This is a JOSE vector, not a product sample.
@@ -528,6 +537,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.True(options.BindAudienceToWebhookId);
             Assert.True(options.RequireBodyHash);
             Assert.True(options.RequireExpiration);
+        }
+
+        [Fact]
+        public void JwtBearer_ExplicitAudience_DoesNotKillBindAudienceDefault()
+        {
+            JwtAuthOptions options = WebhookAuthPresets.JwtBearer(
+                new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)),
+                "https://hooks.example");
+
+            Assert.Equal("https://hooks.example", options.Audience);
+            Assert.True(options.BindAudienceToWebhookId);
+            Assert.True(options.RequireBodyHash);
         }
 
         [Fact]

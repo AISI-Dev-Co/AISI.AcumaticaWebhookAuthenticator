@@ -16,16 +16,17 @@ in the ERP database.
 public class PushEventHandler : AuthenticatedWebhookHandlerBase
 {
     protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =>
-        new HmacAuthenticator(WebhookAuthPresets.GitHub(secrets));
+        new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secrets));
 
     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
     {
-        // context.Body is the request body. HMAC verified those bytes; JWT binds them via `bh`.
+        // context.Body is the request body. JWT binds those bytes via claim `bh`.
     }
 }
 ```
 
-That's a complete, authenticated GitHub webhook. The base class reads the body once into a
+That's a complete, authenticated Bearer JWT webhook (`bh` + `aud` = webhook id). HMAC senders
+use `WebhookAuthPresets.GitHub` / Shopify / Stripe instead. The base class reads the body once into a
 bounded buffer, verifies against it, answers every failure with the same generic 401, and hands
 the body buffer — never the spent stream — to your code. The secret lives in the ERP
 database, maintained by an administrator on its own screen.
@@ -111,6 +112,8 @@ protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvi
 ```
 
 `JwtBearer(secrets)` keeps `RequireBodyHash` and `BindAudienceToWebhookId` on (claim `bh` + `aud` = webhook id). Do not start from a snippet that sets both to `false` — that is an unbound bearer, same class as `SECRET`/`BASIC`.
+
+`JwtBearer(secrets, audience)` sets `Audience` only. It does **not** turn off `BindAudienceToWebhookId`. When `Audience` is set, that value wins over the webhook registration id.
 
 ### Presets
 
