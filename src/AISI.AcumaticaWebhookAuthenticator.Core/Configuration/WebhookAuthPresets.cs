@@ -57,15 +57,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             new JwtAuthOptions(secretProvider);
 
         /// <summary>
-        /// Same as <see cref="JwtBearer(IWebhookSecretProvider)"/> with an explicit <c>aud</c>
-        /// instead of the webhook registration id.
+        /// Same as <see cref="JwtBearer(IWebhookSecretProvider)"/> with an explicit <c>aud</c>.
+        /// Does not turn off <see cref="JwtAuthOptions.BindAudienceToWebhookId"/> — that default
+        /// stays true. When <see cref="JwtAuthOptions.Audience"/> is set, it wins over the webhook id.
         /// </summary>
         public static JwtAuthOptions JwtBearer(IWebhookSecretProvider secretProvider, string audience)
         {
             var options = new JwtAuthOptions(secretProvider)
             {
                 Audience = audience,
-                BindAudienceToWebhookId = false,
             };
             return options;
         }
