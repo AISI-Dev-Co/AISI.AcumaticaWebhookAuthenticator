@@ -50,9 +50,39 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
+        public void ValidHs256Bearer_Authenticates()
+        {
+            string jwt = Token(FutureExpPayload());
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            Assert.True(Bearer().Authenticate(request).Succeeded);
+        }
+
+        [Fact]
+        public void InvalidUtf8Header_IsJwtMalformed()
+        {
+            string header = JwtAuthenticator.Base64UrlEncode(new byte[] { 0xFF, 0xFE });
+            string payload = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes("{}"));
+            string jwt = header + "." + payload + ".e30";
+            WebhookAuthContext request = RequestBuilder.Post()
+                .ReceivedAt(Now)
+                .WithHeader("Authorization", "Bearer " + jwt)
+                .Build();
+
+            AuthResult result = Bearer().Authenticate(request);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
+        }
+
+        [Fact]
         public void Rfc7515AppendixA1_Hs256Vector_Authenticates()
         {
-            // RFC 7515 appendix A.1. Hardcoded: do not mint this token via Compact.
+            // RFC 7515 appendix A.1 has no bh/aud. This is a JOSE vector, not a product sample.
+            // Unbound flags stay on this test only — first sample is JwtBearer() defaults (bh+aud).
             const string jwt =
                 "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9." +
                 "eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ." +
@@ -85,18 +115,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 .Build();
 
             Assert.True(authenticator.Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void ValidHs256Bearer_Authenticates()
-        {
-            string jwt = Token(FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer().Authenticate(request).Succeeded);
         }
 
         [Fact]
