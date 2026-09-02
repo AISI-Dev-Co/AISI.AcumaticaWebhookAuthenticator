@@ -32,6 +32,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class JwtAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
+        private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _tokenHeader;
         private readonly string? _schemePrefix;
@@ -200,12 +202,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
 
-            string headerJson;
-            try
-            {
-                headerJson = Encoding.UTF8.GetString(headerBytes);
-            }
-            catch (ArgumentException)
+            if (!TryUtf8(headerBytes, out string headerJson))
             {
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
@@ -244,12 +241,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
 
-            string payloadJson;
-            try
-            {
-                payloadJson = Encoding.UTF8.GetString(payloadBytes);
-            }
-            catch (ArgumentException)
+            if (!TryUtf8(payloadBytes, out string payloadJson))
             {
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
@@ -430,6 +422,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
             catch (ArgumentOutOfRangeException)
             {
+                return false;
+            }
+        }
+
+        private static bool TryUtf8(byte[] bytes, out string text)
+        {
+            try
+            {
+                text = Utf8Strict.GetString(bytes);
+                return true;
+            }
+            catch (DecoderFallbackException)
+            {
+                text = string.Empty;
                 return false;
             }
         }
