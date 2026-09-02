@@ -32,7 +32,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </remarks>
     public sealed class JwtAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
-        private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        internal static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _tokenHeader;
@@ -101,7 +101,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 exception is ArgumentOutOfRangeException ||
                 exception is OverflowException ||
                 exception is FormatException ||
-                exception is DecoderFallbackException ||
                 exception is InvalidOperationException)
             {
                 // Signed junk, overflowed NumericDate, or a hostile compact token: 401, never 500.
