@@ -3,6 +3,7 @@
 using System;
 using PX.Data;
 using PX.Data.BQL;
+using PX.Data.ReferentialIntegrity.Attributes;
 using WebHook = PX.Api.Webhooks.DAC.WebHook;
 
 // The DAC pattern requires a public BQL field class per property and the standard audit-field
