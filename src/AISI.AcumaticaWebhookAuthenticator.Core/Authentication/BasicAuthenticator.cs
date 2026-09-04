@@ -12,15 +12,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// <remarks>
     /// <para>
     /// The secret is the <em>whole</em> <c>user-id:password</c> credential as one value —
-    /// <c>WebhookSecret.FromUtf8("svc-sender:hunter2")</c> — compared in one fixed-time operation.
-    /// Not splitting at the colon is deliberate: no username lookup to time-attack, no
-    /// user-enumeration distinction, and rotation works like every other scheme.
+    /// compared in one fixed-time operation. Replayable by anyone who observes it, like
+    /// <c>SECRET</c>; for senders that offer Basic and nothing better.
     /// </para>
     /// <para>
-    /// Replayable by anyone who observes it, like <c>SECRET</c>; for senders that offer Basic and
-    /// nothing better. On a 401 the host should send <see cref="Challenge"/> (published through
-    /// <see cref="IChallengeSource"/>) — RFC 7235 requires it, and some senders will not retry
-    /// without it. Immutable and safe to share across threads.
+    /// On a 401 the host should send <see cref="Challenge"/>. The realm is interpolated into
+    /// <c>WWW-Authenticate</c>; quotes, backslashes and control characters are rejected at
+    /// construction because they would corrupt or split the header.
     /// </para>
     /// </remarks>
     public sealed class BasicAuthenticator : IWebhookAuthenticator, IChallengeSource

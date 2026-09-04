@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
+using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 using PX.Api.Webhooks;
 using PX.Data;
 
@@ -29,7 +30,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     ///
     ///     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
     ///     {
-    ///         // context.Body / context.GetBodyText() is the verified payload.
+    ///         // context.Body is the request body. HMAC schemes verified those bytes;
+    ///         // SECRET / BASIC / NONE / unbound JWT did not.
     ///     }
     /// }
     /// </code>
@@ -51,7 +53,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
     /// </para>
     /// <para>
     /// Authentication failures are uniform: same 401, same generic body, whatever the reason. The
-    /// specific <see cref="Diagnostics.AuthFailureCode"/> goes to <see cref="PXTrace"/> only.
+    /// specific <see cref="Diagnostics.AuthFailureCode"/> goes to <see cref="PXTrace"/> only. A
+    /// 401 that distinguished "malformed" from "mismatched" would be a decision oracle.
     /// </para>
     /// </remarks>
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
@@ -96,7 +99,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>
         /// The business logic. Runs only after the request authenticated.
         /// </summary>
-        /// <param name="context">The platform context plus the verified body buffer.</param>
+        /// <param name="context">The platform context plus the request body buffer. Signature coverage depends on the scheme.</param>
         /// <param name="cancellation">The cancellation token.</param>
         protected abstract Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation);
 
@@ -153,9 +156,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             WebhookAuthContext authContext = WebhookRequestMapper.Map(
                 context.Request,
                 read.Body,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                context.Definition.Id);
 
-            AuthResult result = authenticator.Authenticate(authContext);
+            AuthResult result;
+            try
+            {
+                result = authenticator.Authenticate(authContext);
+            }
+            catch (Exception)
+            {
+                // Signed junk and overflowed timestamps must be 401, never 500.
+                PXTrace.WriteWarning(
+                    "Webhook authentication threw (scheme {0}, webhook {1}, trace {2}).",
+                    authenticator.Code,
+                    context.Definition.Id,
+                    context.TraceIdentifier);
+                result = AuthResult.Fail(AuthFailureCode.Unspecified);
+            }
 
             if (!result.Succeeded)
             {

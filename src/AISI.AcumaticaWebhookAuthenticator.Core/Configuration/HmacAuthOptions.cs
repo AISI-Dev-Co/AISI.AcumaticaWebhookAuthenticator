@@ -16,38 +16,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// </para>
     /// <para>
     /// <see cref="Authentication.HmacAuthenticator"/> copies every value it needs in its constructor
-    /// and never reads this object again. Three consequences follow, in ascending order of how much
-    /// they will cost you:
+    /// and never reads this object again. Assignments after construction are silently ignored.
+    /// Sharing one instance across several authenticators freezes each at whatever it read. Mutating
+    /// on one thread while constructing on another can produce a configuration that never coherently
+    /// existed — in particular a <see cref="Template"/> / <see cref="Timestamp"/> pair where the
+    /// replay window does not cover the timestamp the template signs.
     /// </para>
-    /// <list type="number">
-    /// <item>
-    /// <description>
-    /// <em>Assignments after construction are silently ignored.</em> Rotating a secret by assigning
-    /// a new <see cref="SecretProvider"/>-backed options object, or widening a tolerance on a live
-    /// instance, does nothing at all — no error, no effect. To change configuration, construct a new
-    /// authenticator and swap the reference. Secret rotation is handled inside
-    /// <see cref="WebhookSecret"/> and by the provider, not by mutating options.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// <em>Sharing one instance across several authenticators freezes each at whatever it read.</em>
-    /// Two authenticators built either side of a mutation will disagree, permanently, with nothing
-    /// in either object indicating why.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// <em>Mutating on one thread while constructing on another can produce a configuration that
-    /// never coherently existed.</em> Individual reference assignments are atomic; a group of them
-    /// is not. A writer part-way through swapping <see cref="Template"/> and <see cref="Timestamp"/>
-    /// together can be observed by a constructor that sees the new template and the old window — and
-    /// <see cref="DescribeMisconfiguration"/> will happily validate that combination, because each
-    /// half is individually valid. This is the one failure here that is a bug rather than a
-    /// surprise, and confining construction to startup avoids it entirely.
-    /// </description>
-    /// </item>
-    /// </list>
     /// <para>
     /// The authenticator built from these options is immutable and safe to share across threads. It
     /// is the object to hold onto; this one is scaffolding.
@@ -56,13 +30,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     public sealed class HmacAuthOptions
     {
         #region Construction
-        /// <summary>
-        /// Creates options.
-        /// </summary>
-        /// <param name="secretProvider">Where the signing secret comes from.</param>
-        /// <param name="signatureHeader">Header carrying the signature.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="secretProvider"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="signatureHeader"/> is null or blank.</exception>
+        /// <summary>Creates options.</summary>
         public HmacAuthOptions(IWebhookSecretProvider secretProvider, string signatureHeader)
         {
             if (string.IsNullOrWhiteSpace(signatureHeader))
@@ -110,16 +78,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #region Validation
         /// <summary>
         /// Describes what is wrong with this configuration, or <see langword="null"/> when it is
-        /// coherent.
+        /// coherent. A replay window over a timestamp the template does not sign is rejected here.
         /// </summary>
-        /// <returns>A message suitable for a developer, or <see langword="null"/>.</returns>
-        /// <remarks>
-        /// Exposed separately from the constructor of
-        /// <see cref="Authentication.HmacAuthenticator"/> so that
-        /// <see cref="Diagnostics.WebhookSignatureTester"/> can report a misconfiguration instead of
-        /// throwing on it. A diagnostic tool that crashes on the most common class of problem it
-        /// exists to explain is not much of a diagnostic tool.
-        /// </remarks>
         public string? DescribeMisconfiguration()
         {
             if (Template is null)

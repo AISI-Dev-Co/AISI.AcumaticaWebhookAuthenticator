@@ -7,33 +7,33 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Webhook authentication for Acumatica ERP.** `PX.Api.Webhooks.IWebhookHandler` hands you a
-request and leaves authentication entirely to you — this library does the part everyone
-re-implements badly: HMAC verification over the raw request bytes, with the header names,
-encodings, prefixes and signed-payload conventions real senders use, plus admin-managed secrets
-in the ERP database.
+request and leaves authentication entirely to you. The first sample is Bearer JWT (`bh` +
+`aud` = webhook id). HMAC-over-body (GitHub / Shopify / Stripe presets) is the other family —
+same base class, admin-managed secrets in the ERP database.
 
 ```csharp
 public class PushEventHandler : AuthenticatedWebhookHandlerBase
 {
     protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =>
-        new HmacAuthenticator(WebhookAuthPresets.GitHub(secrets));
+        new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secrets));
 
     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
     {
-        // context.Body is the exact byte buffer the signature verified.
+        // context.Body is the request body. JWT binds those bytes via claim `bh`.
     }
 }
 ```
 
-That's a complete, authenticated GitHub webhook. The base class reads the body once into a
+That's a complete, authenticated Bearer JWT webhook (`bh` + `aud` = webhook id). HMAC senders
+use `WebhookAuthPresets.GitHub` / Shopify / Stripe instead. The base class reads the body once into a
 bounded buffer, verifies against it, answers every failure with the same generic 401, and hands
-the verified buffer — never the spent stream — to your code. The secret lives in the ERP
+the body buffer — never the spent stream — to your code. The secret lives in the ERP
 database, maintained by an administrator on its own screen.
 
 ## Features
 
-- **Six schemes** — HMAC, HMAC with replay window, shared secret, HTTP Basic, explicit none;
-  presets for GitHub, Shopify and Stripe, and a template language for everything else
+- **Schemes** — HMAC over the request body, HMAC with replay window, compact JWT (HS256/HS512; token HMAC, not body HMAC), shared secret, HTTP Basic, explicit none;
+  presets for GitHub, Shopify, Stripe and Bearer JWT, plus a template language for other HMAC senders
 - **Secrets managed in the ERP** — encrypted `[PXRSACryptString]` storage, a Modern UI
   maintenance screen (AS301000), per-webhook secrets, edits live within 30 seconds, no restart
 - **Zero-downtime secret rotation** — old and new secrets accepted until the overlap you set
@@ -47,22 +47,23 @@ database, maintained by an administrator on its own screen.
 
 ## Getting started
 
-Grab both artifacts from the [latest release](https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator/releases):
-`AISI.WebhookAuthenticator.zip` (the customization package) and the
-`AISI.AcumaticaWebhookAuthenticator.Core` NuGet package.
+GitHub Releases attach the Core nupkg. Ubuntu CI **does not** attach
+`AISI.WebhookAuthenticator.zip` — the runner has no Acumatica site Bin, so `release.yml`
+skips the zip rather than shipping a missing adapter. Pack the zip locally against a 2025 R2+
+`Bin` (`AcumaticaBinPath`).
 
-1. **Import and publish** `AISI.WebhookAuthenticator.zip` on the Customization Projects screen
-   (SM204505). Publishing creates the secrets table, registers the Webhook Secrets screen and its
-   access rights, and compiles the Modern UI — no manual SQL, no frontend build.
-2. **Write a handler** like the one above in your own customization or extension library,
-   referencing the two shipped assemblies (or the NuGet package for the core types).
-3. **Register the webhook** on the Webhooks screen (SM304000) with your handler's type name —
-   Acumatica gives you the endpoint URL.
-4. **Enter the secret** on the Webhook Secrets screen (AS301000) for that webhook. Done — requests
-   that don't verify never reach your code.
+1. **Core** — take `AISI.AcumaticaWebhookAuthenticator.Core` from the
+   [latest release](https://github.com/AISI-Dev-Co/AISI.AcumaticaWebhookAuthenticator/releases)
+   (or build `src/AISI.AcumaticaWebhookAuthenticator.Core`; no site required).
+2. **Customization zip** — pack `AISI.WebhookAuthenticator.zip` on a machine with a 25R2+ site
+   Bin. Import and publish it on SM204505: secrets table, Webhook Secrets screen, Modern UI.
+   Do not expect that zip on a GitHub Release built by ubuntu-latest.
+3. **Write a handler** like the one above, referencing Core (nupkg) plus the adapter when you
+   publish on the site.
+4. **Register the webhook** on SM304000 with your handler's type name.
+5. **Enter the secret** on AS301000. Requests that don't verify never reach your code.
 
-> **Note:** if your tenant's login name differs from the packaged one, adjust the Webhook Secrets
-> site map URL after the first publish — see the
+> **Note:** the packaged site map uses `~/Pages/AS/AS301000.aspx` (no tenant folder). See the
 > [package notes](customization/AISI.WebhookAuthenticator/README.md).
 
 ### Building from source
@@ -90,12 +91,30 @@ dotnet build src/AISI.AcumaticaWebhookAuthenticator.Core -c Release
 | `SECRET` | `SharedSecretAuthenticator` | the shared secret itself in a header |
 | `BASIC` | `BasicAuthenticator` | RFC 7617 `Authorization: Basic` |
 | `NONE` | `NoneAuthenticator.Instance` | nothing — an explicit, recorded decision |
-| `JWT` | *planned* | |
+| `JWT` | `JwtAuthenticator` | Compact JWS (`HS256` / `HS512`) **over the token**, plus required `bh` body-hash claim |
 
 `SECRET` and `BASIC` credentials are not bound to the request: anyone who observes one can replay
-it against any payload. They exist for senders that offer nothing better — prefer HMAC whenever
-the sender supports it. For `BASIC` the stored secret is the whole `user:password` string, and
-the 401 carries the RFC 7235 `WWW-Authenticate` challenge.
+it against any payload. They exist for senders that offer nothing better — prefer a **body-HMAC**
+scheme (GitHub / Shopify / Stripe / `HmacAuthenticator`) whenever the sender supports it. For
+`BASIC` the stored secret is the whole `user:password` string, and the 401 carries the RFC 7235
+`WWW-Authenticate` challenge.
+
+**JWT is not body-HMAC.** Compact JWS HMAC covers `header.payload` only (RFC 7515). Without a
+body-hash claim that is the same unbound credential as `SECRET`/`BASIC`: a captured token
+authenticates any body. This library defaults to requiring claim `bh` (base64url SHA-256 of the
+raw HTTP body, compared constant-time) and `aud` equal to the webhook registration id, so a
+reused secret cannot be presented to a different webhook. `exp` is required unless you turn that
+off; `iss` is checked only when configured. RS256 is not implemented — that would pull
+`Microsoft.IdentityModel.*` into the site `Bin`.
+
+```csharp
+protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =>
+    new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secrets));
+```
+
+`JwtBearer(secrets)` keeps `RequireBodyHash` and `BindAudienceToWebhookId` on (claim `bh` + `aud` = webhook id). Do not start from a snippet that sets both to `false` — that is an unbound bearer, same class as `SECRET`/`BASIC`.
+
+`JwtBearer(secrets, audience)` sets `Audience` only. It does **not** turn off `BindAudienceToWebhookId`. When `Audience` is set, that value wins over the webhook registration id.
 
 ### Presets
 
@@ -104,6 +123,7 @@ the 401 carries the RFC 7235 `WWW-Authenticate` challenge.
 | `WebhookAuthPresets.GitHub` | `X-Hub-Signature-256` | hex, `sha256=` prefix | body |
 | `WebhookAuthPresets.Shopify` | `X-Shopify-Hmac-Sha256` | base64 | body |
 | `WebhookAuthPresets.Stripe` | `Stripe-Signature` | hex, `t=`/`v1=` list | `{timestamp}.{body}` |
+| `WebhookAuthPresets.JwtBearer` | `Authorization: Bearer` | JWT compact, HS256 | **Not the HTTP body.** Signs the JWT (`header.payload`). Body is bound only via required `bh` (SHA-256 of the raw body). Without `bh` this is an unbound bearer credential, like SECRET/BASIC. |
 
 ### Custom senders
 
@@ -215,8 +235,6 @@ both supported versions — the receipts are in [docs/framework-notes.md](docs/f
 
 ## Roadmap
 
-- JWT scheme (the real work is `Microsoft.IdentityModel.*` binding redirects against a site's
-  `Bin`, not the token logic)
 - Retries — redelivery handling for payloads whose processing failed after authenticating
 - Full payload capture to Acumatica's webhook request record, so the platform's built-in request
   log carries the complete verified body

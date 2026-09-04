@@ -4,11 +4,7 @@ using PX.Common;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// User-facing messages, in the localizable form Acumatica expects: constants in a
-    /// <see cref="PXLocalizableAttribute"/> class, so an administrator's locale can translate
-    /// them. Trace-only text stays inline — the trace is for developers and is not localized.
-    /// </summary>
+    /// <summary>Localizable screen messages.</summary>
     [PXLocalizable]
     public static class Messages
     {

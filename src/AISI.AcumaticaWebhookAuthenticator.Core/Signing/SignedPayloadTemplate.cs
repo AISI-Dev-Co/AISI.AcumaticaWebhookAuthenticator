@@ -10,27 +10,7 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>
-    /// Describes the exact byte sequence a sender signs.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the piece that makes the library useful across senders rather than for one sender.
-    /// GitHub signs the body alone; Stripe signs <c>{timestamp}.{body}</c>; others prepend the HTTP
-    /// method or the request path. Rather than a strategy class per vendor, the convention is a
-    /// template string resolved at verification time.
-    /// </para>
-    /// <para>
-    /// Supported tokens: <c>{body}</c>, <c>{timestamp}</c>, <c>{method}</c>, <c>{path}</c> and
-    /// <c>{header:Name}</c>. A literal brace is written <c>{{</c> or <c>}}</c>.
-    /// </para>
-    /// <para>
-    /// Resolution produces <em>bytes</em>, not a string. <c>{body}</c> contributes the raw request
-    /// bytes verbatim; only the literal segments and the scalar tokens are UTF-8 encoded. Building
-    /// the signed payload as a string would force the body through a decode/encode round trip, which
-    /// is not lossless for a body carrying a BOM, a non-UTF-8 charset or an invalid byte sequence.
-    /// </para>
-    /// </remarks>
+    /// <summary>Byte sequence the sender signs. Tokens: <c>{body}</c>, <c>{timestamp}</c>, <c>{method}</c>, <c>{path}</c>, <c>{header:Name}</c>.</summary>
     public sealed class SignedPayloadTemplate
     {
         #region Construction and state

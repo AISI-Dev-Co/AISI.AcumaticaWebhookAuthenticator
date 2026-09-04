@@ -5,10 +5,10 @@ name: Release
 #   2. AISI.WebhookAuthenticator.zip - the importable Acumatica customization package,
 #      assembled from customization/AISI.WebhookAuthenticator (project.xml + payload)
 #
-# The Acumatica adapter DLL inside the zip is the binary committed under
-# customization/AISI.WebhookAuthenticator/Bin: it references licensed PX.* assemblies from a site
-# Bin, which cannot exist on a runner, so CI cannot compile it. The version gate below stops a
-# stale committed binary from shipping. The Core DLL is built fresh here.
+# The Acumatica adapter DLL is not in git: it references licensed PX.* assemblies from a site
+# Bin, which cannot exist on a runner, so CI cannot compile it. A committed blob is almost never
+# this branch's output. Core is built fresh here. The customization zip is attached only when a
+# freshly built adapter DLL is present on the runner (local pack / a machine with site Bin).
 
 on:
   push:
@@ -49,40 +49,34 @@ jobs:
       - name: Pack NuGet package
         run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts
 
-      # The committed adapter binary must be the one this version's source produced. A mismatch
-      # means someone bumped the version or changed the adapter without refreshing the binary -
-      # see customization/AISI.WebhookAuthenticator/README.md for the refresh step.
-      - name: Assert the committed adapter DLL matches the version
-        shell: pwsh
-        run: |
-          $expected = '${{ steps.version.outputs.version }}.0'
-          $dll = 'customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll'
-          $actual = [System.Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString()
-          if ($actual -ne $expected) {
-            Write-Host "::error::$dll is version $actual but Directory.Build.props says $expected. Rebuild it against a 2025 R2 site Bin and re-commit."
-            exit 1
-          }
-          Write-Host "Adapter DLL version $actual matches."
-
-      # Layout verified against a real Customization Project Editor export: project.xml at the
-      # root, every file payload at its app-relative path.
+      # Adapter DLL is gitignored and not on the runner. Do not ship a zip that lists it in
+      # project.xml without the matching binary from this branch. Nupkg still ships.
       - name: Assemble customization package
+        id: zip
         run: |
           set -euo pipefail
+          ADAPTER='customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll'
+          if [[ ! -f "$ADAPTER" ]]; then
+            echo "::warning::$ADAPTER is not in the tree. Build it vs a 2025 R2+ site Bin before tagging a customization zip. Publishing Core nupkg only — will not attach a zip with a missing or stale adapter."
+            echo "has_zip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           STAGE=$(mktemp -d)
           cp customization/AISI.WebhookAuthenticator/project.xml "$STAGE/"
           mkdir -p "$STAGE/Bin" "$STAGE/screens/AS/AS301000"
           cp src/AISI.AcumaticaWebhookAuthenticator.Core/bin/Release/netstandard2.0/AISI.AcumaticaWebhookAuthenticator.Core.dll "$STAGE/Bin/"
-          cp customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll "$STAGE/Bin/"
+          cp "$ADAPTER" "$STAGE/Bin/"
           cp screens/AS/AS301000/AS301000.ts screens/AS/AS301000/AS301000.html "$STAGE/screens/AS/AS301000/"
           (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/artifacts/AISI.WebhookAuthenticator.zip" .)
           unzip -l artifacts/AISI.WebhookAuthenticator.zip
+          echo "has_zip=true" >> "$GITHUB_OUTPUT"
 
       # Acumatica assemblies are licensed and must never be redistributed; assert against every
       # artifact, the customization zip included.
       - name: Assert no Acumatica assemblies in any artifact
         run: |
           set -euo pipefail
+          shopt -s nullglob
           for pkg in ./artifacts/*.nupkg ./artifacts/*.zip; do
             echo "Inspecting $pkg"
             if unzip -l "$pkg" | grep -Ei 'PX\..*\.dll'; then
@@ -90,6 +84,7 @@ jobs:
               exit 1
             fi
           done
+          shopt -u nullglob
           echo "No Acumatica assemblies found."
 
       - name: Upload artifacts
@@ -99,6 +94,7 @@ jobs:
           path: |
             artifacts/*.nupkg
             artifacts/AISI.WebhookAuthenticator.zip
+          if-no-files-found: warn
 
       # nuget.org is the install path VARs actually use. The key lives in the repo's
       # NUGET_API_KEY Actions secret — never in the tree. Missing secret skips the push
@@ -123,8 +119,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ASSETS=(artifacts/*.nupkg)
+          if [[ -f artifacts/AISI.WebhookAuthenticator.zip ]]; then
+            ASSETS+=(artifacts/AISI.WebhookAuthenticator.zip)
+          else
+            echo "::warning::No customization zip — adapter DLL was not on the runner."
+          fi
           gh release create "${GITHUB_REF#refs/tags/}" \
-            artifacts/*.nupkg \
-            artifacts/AISI.WebhookAuthenticator.zip \
+            "${ASSETS[@]}" \
             --title "${GITHUB_REF#refs/tags/}" \
             --generate-notes

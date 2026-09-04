@@ -8,27 +8,7 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// Restricts another authenticator to callers on an <see cref="IpAllowlist"/>, read from a
-    /// forwarded header.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>Only as trustworthy as the header, and the header is only trustworthy behind a
-    /// proxy you control.</strong> Acumatica's <c>WebhookRequest</c> exposes no remote address, so
-    /// the caller's IP can only come from something like <c>X-Forwarded-For</c> — which any sender
-    /// can write. Without a trusted front proxy overwriting or appending to it on every request,
-    /// the gate is theatre. Defence in depth on top of a signature scheme, not authentication.
-    /// </para>
-    /// <para>
-    /// Proxies append, so only the last <see cref="TrustedProxyDepth"/> entries were written by
-    /// infrastructure you trust: the client address is read at exactly that depth from the
-    /// <em>right</em> — never the left, which is the sender's to invent. Header absent, entry
-    /// unparseable, or fewer entries than the depth all fail closed, with the same uniform 401 as
-    /// every other failure. The check runs before the inner authenticator, so a disallowed caller
-    /// costs no signature work. Immutable and safe to share across threads.
-    /// </para>
-    /// </remarks>
+    /// <summary>Restricts another authenticator to an IP allowlist read from a forwarded header (rightmost at trusted depth). Meaningful only behind a proxy you control.</summary>
     public sealed class IpAllowlistAuthenticator : IWebhookAuthenticator, IChallengeSource, IRequestPathDependent
     {
         #region Construction and state

@@ -7,22 +7,7 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>
-    /// A signing secret, optionally with a second secret valid during a rotation overlap.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Rotation is not an edge case. A sender rotating its signing secret emits requests signed with
-    /// either the old or the new one for the length of the overlap window, and a verifier that knows
-    /// only one of them drops roughly half the traffic for the duration.
-    /// </para>
-    /// <para>
-    /// Key material never leaves this type. Verification happens in <see cref="Matches"/> rather
-    /// than by handing the caller the bytes, so there is no reference an unrelated component can
-    /// hold on to or mutate, and every candidate is evaluated even after one has matched — an early
-    /// return would leak through timing which of the two secrets is live.
-    /// </para>
-    /// </remarks>
+    /// <summary>Signing secret, optionally with a second key accepted until a rotation expiry.</summary>
     public sealed class WebhookSecret
     {
         #region Construction and state

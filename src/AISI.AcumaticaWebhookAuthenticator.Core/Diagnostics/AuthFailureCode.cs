@@ -2,15 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 {
-    /// <summary>
-    /// Why an authentication attempt failed.
-    /// </summary>
-    /// <remarks>
-    /// These codes are for the trace and for tests. They must never reach the sender. Every
-    /// authentication failure returns the same 401 with the same generic body, because telling a
-    /// caller whether the signature was malformed, absent, or merely wrong hands them a decision
-    /// oracle they can iterate against.
-    /// </remarks>
+    /// <summary>Trace/test codes for a failed attempt. Never send these to the caller.</summary>
     public static class AuthFailureCode
     {
         #region Signature
@@ -64,6 +56,38 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
         /// <summary>The credential was well formed but did not match any live secret.</summary>
         public const string CredentialMismatch = "credential_mismatch";
+        #endregion
+
+        #region JWT
+        /// <summary>The compact JWT was not three base64url segments.</summary>
+        public const string JwtMalformed = "jwt_malformed";
+
+        /// <summary>The header <c>alg</c> was missing, <c>none</c>, or not the configured HMAC.</summary>
+        public const string JwtAlgorithmRejected = "jwt_algorithm_rejected";
+
+        /// <summary>Expiration is required and the payload has no <c>exp</c>.</summary>
+        public const string JwtExpirationMissing = "jwt_expiration_missing";
+
+        /// <summary>The token's <c>exp</c> is in the past (after clock skew).</summary>
+        public const string JwtExpired = "jwt_expired";
+
+        /// <summary>The token's <c>nbf</c> is in the future (after clock skew).</summary>
+        public const string JwtNotYetValid = "jwt_not_yet_valid";
+
+        /// <summary>The payload <c>iss</c> did not match the configured issuer.</summary>
+        public const string JwtIssuerMismatch = "jwt_issuer_mismatch";
+
+        /// <summary>The payload <c>aud</c> did not contain the configured audience.</summary>
+        public const string JwtAudienceMismatch = "jwt_audience_mismatch";
+
+        /// <summary>The header carried <c>crit</c>. This verifier understands no extensions (RFC 7515 MUST).</summary>
+        public const string JwtCriticalHeader = "jwt_critical_header";
+
+        /// <summary>Body-hash is required and the payload has no <c>bh</c> claim.</summary>
+        public const string JwtBodyHashMissing = "jwt_body_hash_missing";
+
+        /// <summary>The <c>bh</c> claim did not match SHA-256 of the raw request body.</summary>
+        public const string JwtBodyHashMismatch = "jwt_body_hash_mismatch";
         #endregion
 
         #region Client address

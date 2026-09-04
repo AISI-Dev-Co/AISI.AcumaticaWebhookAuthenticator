@@ -6,13 +6,6 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The one copy of the credential-comparison pipeline the <c>SECRET</c> and <c>BASIC</c>
-    /// schemes share: header lookup, fail-closed secret check, the deliberately
-    /// non-short-circuited accumulation over every header value, and the
-    /// malformed-versus-mismatched failure triage. The schemes differ only in how a header value
-    /// becomes credential bytes, which is what <see cref="TryDecode"/> supplies.
-    /// </summary>
     internal static class CredentialVerifier
     {
         /// <summary>Turns one header value into credential bytes, or reports it malformed.</summary>

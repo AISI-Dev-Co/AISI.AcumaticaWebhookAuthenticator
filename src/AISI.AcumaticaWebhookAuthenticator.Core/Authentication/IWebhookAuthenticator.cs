@@ -7,17 +7,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// </summary>
     public interface IWebhookAuthenticator
     {
-        /// <summary>
-        /// Short stable identifier for the scheme, e.g. "HMAC". Recorded against the endpoint
-        /// configuration and in traces.
-        /// </summary>
+        /// <summary>Short scheme id, e.g. HMAC, JWT, BASIC.</summary>
         string Code { get; }
 
-        /// <summary>
-        /// Authenticates a request.
-        /// </summary>
-        /// <param name="context">The request.</param>
-        /// <returns>The outcome.</returns>
+        /// <summary>Authenticates one request.</summary>
         AuthResult Authenticate(WebhookAuthContext context);
     }
 }

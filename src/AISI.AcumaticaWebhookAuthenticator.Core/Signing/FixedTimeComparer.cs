@@ -4,27 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>
-    /// Constant-time equality for secret material.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This exists because <c>System.Security.Cryptography.CryptographicOperations.FixedTimeEquals</c>
-    /// is not available on the .NET Framework 4.8 runtime that Acumatica 2025 R2 runs on — it was
-    /// introduced in .NET Standard 2.1, and net48 implements .NET Standard 2.0 only.
-    /// </para>
-    /// <para>
-    /// Every comparison of a computed signature against a caller-supplied one must go through this
-    /// type. Using <c>==</c> on strings or <c>SequenceEqual</c> on byte arrays leaks the position of
-    /// the first differing byte through timing, which is enough to forge a signature one byte at a
-    /// time.
-    /// </para>
-    /// <para>
-    /// Following the same contract as the BCL implementation, the <em>lengths</em> of the two inputs
-    /// are not treated as secret and a length mismatch returns early. For signature verification this
-    /// is not a weakness: the length is fixed by the hash algorithm and is public.
-    /// </para>
-    /// </remarks>
+    /// <summary>Constant-time equality for secret material. Length is not treated as secret.</summary>
     public static class FixedTimeComparer
     {
         /// <summary>
