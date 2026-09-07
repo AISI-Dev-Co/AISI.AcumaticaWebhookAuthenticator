@@ -19,7 +19,7 @@
   		</layout>
   		<data>
   			<SiteMap>
-  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Pages/AS/AS301000.aspx" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000">
+  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D">
   					<RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
   					<RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
   				</row>
@@ -54,7 +54,7 @@
   		</layout>
   		<data>
   			<SiteMap>
-  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Pages/AS/AS301000.aspx" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" />
+  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D" />
   			</SiteMap>
   		</data>
   	</data-set>

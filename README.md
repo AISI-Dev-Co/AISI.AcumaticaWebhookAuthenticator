@@ -63,7 +63,8 @@ skips the zip rather than shipping a missing adapter. Pack the zip locally again
 4. **Register the webhook** on SM304000 with your handler's type name.
 5. **Enter the secret** on AS301000. Requests that don't verify never reach your code.
 
-> **Note:** the packaged site map uses `~/Pages/AS/AS301000.aspx` (no tenant folder). See the
+> **Note:** the packaged site map uses Modern UI as the default (`SelectedUI=D`,
+> `~/Scripts/Screens/AS301000.html`). See the
 > [package notes](customization/AISI.WebhookAuthenticator/README.md).
 
 ### Building from source

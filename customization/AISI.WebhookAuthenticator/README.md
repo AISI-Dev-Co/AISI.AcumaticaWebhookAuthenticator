@@ -44,7 +44,8 @@ DLL.
 
 ## Site map URL
 
-The site map node uses the tenant-agnostic Pages URL `~/Pages/AS/AS301000.aspx`. Access rights
+The site map node uses Modern UI as the default: `SelectedUI="D"` and
+`~/Scripts/Screens/AS301000.html` (no tenant folder). Access rights
 grant Delete (4) to Administrator and Customizer only — the package does not ship a foreign
 tenant role catalog. Publishing still compiles the Modern UI from the `PerTenantFile` HTML/TS;
 no manual frontend build is needed.
