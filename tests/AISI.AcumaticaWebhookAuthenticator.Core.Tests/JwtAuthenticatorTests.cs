@@ -109,7 +109,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
             // The RFC vector carries no bh or aud, so binding is off for it alone.
             var authenticator = new JwtAuthenticator(
-                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromBase64(key)))
+                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.Parse(key, SecretEncoding.Base64)))
                 {
                     RequireBodyHash = false,
                     BindAudienceToWebhookId = false,
