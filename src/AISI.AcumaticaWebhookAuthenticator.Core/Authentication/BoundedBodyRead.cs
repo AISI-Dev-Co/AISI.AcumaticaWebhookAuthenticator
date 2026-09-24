@@ -4,9 +4,7 @@ using System;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The outcome of reading a request body through <see cref="BoundedBodyReader"/>.
-    /// </summary>
+    /// <summary>The outcome of reading a request body through <see cref="BoundedBodyReader"/>.</summary>
     public readonly struct BoundedBodyRead
     {
         private readonly byte[]? _body;
@@ -17,17 +15,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _body = body;
         }
 
-        /// <summary>
-        /// Whether the whole body fit inside the limit. When <see langword="false"/> the request
-        /// must be rejected and <see cref="Body"/> is empty — a truncated body is not a payload.
-        /// </summary>
+        /// <summary>Whether the whole body fit inside the limit; when false the request must be rejected.</summary>
         public bool WithinLimit { get; }
 
         /// <summary>The body bytes when <see cref="WithinLimit"/>, otherwise empty. Never null.</summary>
         public byte[] Body => _body ?? Array.Empty<byte>();
 
         /// <summary>Creates a successful read.</summary>
-        public static BoundedBodyRead Complete(byte[] body) => new BoundedBodyRead(true, body);
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> is null.</exception>
+        public static BoundedBodyRead Complete(byte[] body) =>
+            new BoundedBodyRead(true, body ?? throw new ArgumentNullException(nameof(body)));
 
         /// <summary>Creates an over-limit result.</summary>
         public static BoundedBodyRead OverLimit() => new BoundedBodyRead(false, null);

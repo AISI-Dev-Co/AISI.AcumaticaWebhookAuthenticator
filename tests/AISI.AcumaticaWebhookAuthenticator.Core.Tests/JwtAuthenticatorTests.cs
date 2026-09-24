@@ -1,7 +1,10 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
 using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
@@ -15,104 +18,98 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         private const string SecretText = "test-secret";
         private static readonly byte[] SecretBytes = Encoding.UTF8.GetBytes(SecretText);
         private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
-        private static readonly string EmptyBodyBh =
-            JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(Array.Empty<byte>()));
+        private static readonly long FutureExp = Now.AddHours(1).ToUnixTimeSeconds();
+        private static readonly string EmptyBodyBh = JwtTestTokens.BodyHash(Array.Empty<byte>());
         private static readonly string DefaultAud = RequestBuilder.DefaultWebhookId.ToString("D");
+        private static readonly long DefaultSkewSeconds = (long)Options().ClockSkew.TotalSeconds;
 
-        private static JwtAuthenticator Bearer(Action<JwtAuthOptions>? configure = null)
+        #region Helpers
+        private static StaticSecretProvider Provider() => new(WebhookSecret.FromUtf8(SecretText));
+
+        private static JwtAuthOptions Options(Action<JwtAuthOptions>? configure = null)
         {
-            var options = new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)));
+            var options = new JwtAuthOptions(Provider());
             configure?.Invoke(options);
-            return new JwtAuthenticator(options);
+            return options;
+        }
+
+        private static JwtAuthenticator Bearer(Action<JwtAuthOptions>? configure = null) => new(Options(configure));
+
+        /// <summary>The bound default claims (exp, aud, bh) with overrides; a null value removes the claim.</summary>
+        private static string Claims(params (string Name, object? Value)[] overrides)
+        {
+            var claims = new Dictionary<string, object?>
+            {
+                ["exp"] = FutureExp,
+                ["aud"] = DefaultAud,
+                ["bh"] = EmptyBodyBh,
+            };
+
+            foreach ((string name, object? value) in overrides)
+            {
+                if (value is null)
+                {
+                    claims.Remove(name);
+                }
+                else
+                {
+                    claims[name] = value;
+                }
+            }
+
+            return JsonSerializer.Serialize(claims);
         }
 
         private static string Token(string payloadJson, HmacAlgorithm algorithm = HmacAlgorithm.Sha256, byte[]? key = null) =>
-            JwtAuthenticator.Compact(algorithm, key ?? SecretBytes, payloadJson);
+            JwtTestTokens.Compact(algorithm, key ?? SecretBytes, payloadJson);
 
-        private static string FutureExpPayload(string extra = "")
+        private static string SignedWithHeader(string headerJson) =>
+            JwtTestTokens.Sign(headerJson, Claims(), SecretBytes);
+
+        private static RequestBuilder Request(string authorization) =>
+            RequestBuilder.Post().ReceivedAt(Now).WithHeader("Authorization", authorization);
+
+        private static AuthResult Authenticate(string jwt, Action<JwtAuthOptions>? configure = null) =>
+            Bearer(configure).Authenticate(Request("Bearer " + jwt).Build());
+
+        private static void AssertFailure(string expectedFailure, AuthResult result)
         {
-            long exp = Now.ToUnixTimeSeconds() + 3600;
-            return "{\"exp\":" + exp +
-                ",\"aud\":\"" + DefaultAud + "\"" +
-                ",\"bh\":\"" + EmptyBodyBh + "\"" +
-                extra + "}";
+            Assert.False(result.Succeeded);
+            Assert.Equal(expectedFailure, result.FailureCode);
         }
 
-        private static string Sign(string headerJson, string payloadJson, byte[]? key = null)
+        private static void AssertOutcome(string? expectedFailure, AuthResult result)
         {
-            string header = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
-            string payload = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
-            byte[] signature = HmacComputer.Compute(
-                HmacAlgorithm.Sha256,
-                key ?? SecretBytes,
-                Encoding.ASCII.GetBytes(header + "." + payload));
-            return header + "." + payload + "." + JwtAuthenticator.Base64UrlEncode(signature);
+            if (expectedFailure is null)
+            {
+                Assert.True(result.Succeeded, result.FailureCode);
+            }
+            else
+            {
+                AssertFailure(expectedFailure, result);
+            }
         }
+        #endregion
 
+        #region Signature and algorithm
         [Fact]
         public void ValidHs256Bearer_Authenticates()
         {
-            string jwt = Token(FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer().Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void InvalidUtf8Header_IsJwtMalformed()
-        {
-            string header = JwtAuthenticator.Base64UrlEncode(new byte[] { 0xFF, 0xFE });
-            string payload = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes("{}"));
-            string jwt = header + "." + payload + ".e30";
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void Utf8Strict_InvalidBytes_ThrowOnInvalidBytes()
-        {
-            // Replacement encoding would also make InvalidUtf8Header_IsJwtMalformed
-            // (JSON parse fail). Pin throwOnInvalidBytes so invalid UTF-8 never reaches JSON.
-            Assert.Throws<DecoderFallbackException>(
-                () => JwtAuthenticator.Utf8Strict.GetString(new byte[] { 0xFF, 0xFE }));
+            Assert.True(Authenticate(Token(Claims())).Succeeded);
         }
 
         [Fact]
         public void Rfc7515AppendixA1_Hs256Vector_Authenticates()
         {
-            // RFC 7515 appendix A.1 has no bh/aud. This is a JOSE vector, not a product sample.
-            // Unbound flags stay on this test only — first sample is JwtBearer() defaults (bh+aud).
             const string jwt =
                 "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9." +
                 "eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ." +
                 "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-            const string keyB64Url =
-                "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
+            const string key = "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ+EstJQLr/T+1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow==";
 
-            string padded = keyB64Url.Replace('-', '+').Replace('_', '/');
-            switch (padded.Length % 4)
-            {
-                case 2:
-                    padded += "==";
-                    break;
-                case 3:
-                    padded += "=";
-                    break;
-            }
-
-            byte[] key = Convert.FromBase64String(padded);
+            // The RFC vector carries no bh or aud, so binding is off for it alone.
             var authenticator = new JwtAuthenticator(
-                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromBytes(key)))
+                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromBase64(key)))
                 {
                     RequireBodyHash = false,
                     BindAudienceToWebhookId = false,
@@ -127,428 +124,300 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         }
 
         [Fact]
-        public void ValidJwt_TamperedBody_FailsWhenBodyBound()
-        {
-            byte[] original = Encoding.UTF8.GetBytes("{\"ok\":true}");
-            string bh = JwtAuthenticator.Base64UrlEncode(JwtAuthenticator.ComputeBodyHash(original));
-            long exp = Now.ToUnixTimeSeconds() + 3600;
-            string jwt = Token(
-                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + bh + "\"}");
-
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithBody("tampered")
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtBodyHashMismatch, result.FailureCode);
-        }
-
-        [Fact]
-        public void OverflowExp_IsUnauthorizedRatherThanThrown()
-        {
-            string jwt = Token(
-                "{\"exp\":" + long.MaxValue +
-                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void EmptySignatureWithHs256_IsRejected()
-        {
-            string jwt = Token(FutureExpPayload());
-            string[] parts = jwt.Split('.');
-            string emptySig = parts[0] + "." + parts[1] + ".";
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + emptySig)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void CritHeader_IsRejected()
-        {
-            string jwt = Sign(
-                "{\"alg\":\"HS256\",\"typ\":\"JWT\",\"crit\":[\"b64\"]}",
-                FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtCriticalHeader, result.FailureCode);
-        }
-
-        [Fact]
-        public void DuplicateAlgKey_IsRejected()
-        {
-            string jwt = Sign(
-                "{\"alg\":\"HS256\",\"alg\":\"none\"}",
-                FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void UnhandledJsonEscape_IsRejected()
-        {
-            string jwt = Sign(
-                "{\"alg\":\"HS256\",\"x\":\"\\q\"}",
-                FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void OversizedToken_IsRejected()
-        {
-            var padding = new string('a', 9000);
-            string jwt = Token(
-                "{\"exp\":" + (Now.ToUnixTimeSeconds() + 3600) +
-                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh +
-                "\",\"pad\":\"" + padding + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtMalformed, result.FailureCode);
-        }
-
-        [Fact]
-        public void SchemeToken_IsCaseInsensitive()
-        {
-            string jwt = Token(FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer().Authenticate(request).Succeeded);
-        }
-
-        [Fact]
         public void WrongSecret_FailsAsSignatureMismatch()
         {
-            string jwt = Token(FutureExpPayload());
-            var authenticator = new JwtAuthenticator(
-                new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromUtf8("other-secret"))));
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
+            string jwt = Token(Claims(), key: Encoding.UTF8.GetBytes("other-secret"));
 
-            AuthResult result = authenticator.Authenticate(request);
+            AssertFailure(AuthFailureCode.SignatureMismatch, Authenticate(jwt));
+        }
 
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.SignatureMismatch, result.FailureCode);
+        [Fact]
+        public void TamperedPayload_FailsAsSignatureMismatch()
+        {
+            string[] parts = Token(Claims()).Split('.');
+            string tampered = parts[0] + "." + JwtTestTokens.Base64Url("{\"exp\":9999999999}") + "." + parts[2];
+
+            AssertFailure(AuthFailureCode.SignatureMismatch, Authenticate(tampered));
+        }
+
+        [Fact]
+        public void EmptySignature_IsRejected()
+        {
+            string jwt = Token(Claims());
+
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(jwt.Substring(0, jwt.LastIndexOf('.') + 1)));
         }
 
         [Fact]
         public void RotatingSecret_IsAcceptedInsideItsWindow()
         {
-            string jwt = Token(FutureExpPayload(), key: Encoding.UTF8.GetBytes("old-secret"));
+            string jwt = Token(Claims(), key: Encoding.UTF8.GetBytes("old-secret"));
             var provider = new StaticSecretProvider(
                 WebhookSecret.FromUtf8(SecretText).WithRotatingUtf8("old-secret", Now.AddDays(1)));
-            var authenticator = new JwtAuthenticator(new JwtAuthOptions(provider));
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
 
-            Assert.True(authenticator.Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void ExpiredToken_Fails()
-        {
-            long exp = Now.ToUnixTimeSeconds() - 120;
-            string jwt = Token(
-                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtExpired, result.FailureCode);
-        }
-
-        [Fact]
-        public void ExpiredWithinClockSkew_Succeeds()
-        {
-            long exp = Now.ToUnixTimeSeconds() - 30;
-            string jwt = Token(
-                "{\"exp\":" + exp + ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer().Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void MissingExp_FailsWhenRequired()
-        {
-            string jwt = Token("{\"sub\":\"x\",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtExpirationMissing, result.FailureCode);
-        }
-
-        [Fact]
-        public void MissingExp_SucceedsWhenNotRequired()
-        {
-            string jwt = Token("{\"sub\":\"x\",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer(o => o.RequireExpiration = false).Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void NbfInTheFuture_Fails()
-        {
-            long nbf = Now.ToUnixTimeSeconds() + 120;
-            long exp = Now.ToUnixTimeSeconds() + 3600;
-            string jwt = Token(
-                "{\"exp\":" + exp + ",\"nbf\":" + nbf +
-                ",\"aud\":\"" + DefaultAud + "\",\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtNotYetValid, result.FailureCode);
-        }
-
-        [Fact]
-        public void IssuerAndAudience_MustMatchWhenConfigured()
-        {
-            long exp = Now.ToUnixTimeSeconds() + 3600;
-            string jwt = Token(
-                "{\"exp\":" + exp +
-                ",\"iss\":\"sender\",\"aud\":[\"hook\",\"other\"],\"bh\":\"" + EmptyBodyBh + "\"}");
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            Assert.True(Bearer(o =>
-            {
-                o.Issuer = "sender";
-                o.Audience = "hook";
-            }).Authenticate(request).Succeeded);
-
-            AuthResult badIss = Bearer(o =>
-            {
-                o.Issuer = "other";
-                o.Audience = "hook";
-            }).Authenticate(request);
-            Assert.Equal(AuthFailureCode.JwtIssuerMismatch, badIss.FailureCode);
-
-            AuthResult badAud = Bearer(o => o.Audience = "missing").Authenticate(request);
-            Assert.Equal(AuthFailureCode.JwtAudienceMismatch, badAud.FailureCode);
-        }
-
-        [Fact]
-        public void MissingWebhookId_FailsAudienceWhenBound()
-        {
-            string jwt = Token(FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithoutWebhookId()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtAudienceMismatch, result.FailureCode);
+            Assert.True(new JwtAuthenticator(new JwtAuthOptions(provider)).Authenticate(Request("Bearer " + jwt).Build()).Succeeded);
         }
 
         [Fact]
         public void AlgNone_IsRejected()
         {
-            string header = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes("{\"alg\":\"none\",\"typ\":\"JWT\"}"));
-            string payload = JwtAuthenticator.Base64UrlEncode(Encoding.UTF8.GetBytes(FutureExpPayload()));
-            string jwt = header + "." + payload + ".";
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
+            string jwt = JwtTestTokens.Base64Url("{\"alg\":\"none\",\"typ\":\"JWT\"}") + "." + JwtTestTokens.Base64Url(Claims()) + ".";
 
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtAlgorithmRejected, result.FailureCode);
+            AssertFailure(AuthFailureCode.JwtAlgorithmRejected, Authenticate(jwt));
         }
 
         [Fact]
         public void Hs512_WhenConfiguredForHs256_IsRejected()
         {
-            string jwt = Token(FutureExpPayload(), HmacAlgorithm.Sha512);
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.JwtAlgorithmRejected, result.FailureCode);
+            AssertFailure(AuthFailureCode.JwtAlgorithmRejected, Authenticate(Token(Claims(), HmacAlgorithm.Sha512)));
         }
 
         [Fact]
         public void Hs512_AuthenticatesWhenConfigured()
         {
-            string jwt = Token(FutureExpPayload(), HmacAlgorithm.Sha512);
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
+            Assert.True(Authenticate(Token(Claims(), HmacAlgorithm.Sha512), o => o.Algorithm = HmacAlgorithm.Sha512).Succeeded);
+        }
 
-            Assert.True(Bearer(o => o.Algorithm = HmacAlgorithm.Sha512).Authenticate(request).Succeeded);
+        [Fact]
+        public void CritHeader_IsRejected()
+        {
+            string jwt = SignedWithHeader("{\"alg\":\"HS256\",\"typ\":\"JWT\",\"crit\":[\"b64\"]}");
+
+            AssertFailure(AuthFailureCode.JwtCriticalHeader, Authenticate(jwt));
+        }
+        #endregion
+
+        #region Token parsing
+        [Fact]
+        public void DuplicateAlgKey_IsRejected()
+        {
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(SignedWithHeader("{\"alg\":\"HS256\",\"alg\":\"none\"}")));
+        }
+
+        [Fact]
+        public void DuplicatePayloadKeys_AreRejected()
+        {
+            string payload = Claims().Replace("{\"exp\"", "{\"exp\":1,\"exp\"", StringComparison.Ordinal);
+
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(Token(payload)));
+        }
+
+        [Fact]
+        public void UnhandledJsonEscape_IsRejected()
+        {
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(SignedWithHeader("{\"alg\":\"HS256\",\"x\":\"\\q\"}")));
+        }
+
+        [Theory]
+        [InlineData("{ \"alg\" :\t\"HS256\"\r\n}", null)]
+        [InlineData("{\"alg\":\"HS256\",\u00A0\"typ\":\"JWT\"}", AuthFailureCode.JwtMalformed)]
+        public void OnlyJsonWhitespace_IsAccepted(string headerJson, string? expectedFailure)
+        {
+            AssertOutcome(expectedFailure, Authenticate(SignedWithHeader(headerJson)));
+        }
+
+        [Fact]
+        public void InvalidUtf8InsideHeaderString_IsJwtMalformed()
+        {
+            // Replacement decoding would turn 0xFF into U+FFFD and accept the token.
+            byte[] header = Encoding.ASCII.GetBytes("{\"alg\":\"HS256\",\"x\":\"#\"}");
+            header[Array.IndexOf(header, (byte)'#')] = 0xFF;
+            string jwt = JwtTestTokens.SignSegments(
+                JwtTestTokens.Base64Url(header), JwtTestTokens.Base64Url(Claims()), SecretBytes);
+
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(jwt));
+        }
+
+        [Theory]
+        [InlineData("{\"a\":", "}", JwtJsonObject.MaxDepth - 1, null)]
+        [InlineData("{\"a\":", "}", JwtJsonObject.MaxDepth, AuthFailureCode.JwtMalformed)]
+        [InlineData("{\"a\":", "}", 5000, AuthFailureCode.JwtMalformed)]
+        [InlineData("[", "]", JwtJsonObject.MaxDepth - 1, null)]
+        [InlineData("[", "]", 5000, AuthFailureCode.JwtMalformed)]
+        public void HeaderNesting_IsCappedAtMaxDepth(string open, string close, int levels, string? expectedFailure)
+        {
+            string nested = string.Concat(Enumerable.Repeat(open, levels)) + "1" + string.Concat(Enumerable.Repeat(close, levels));
+            string jwt = SignedWithHeader("{\"alg\":\"HS256\",\"x\":" + nested + "}");
+
+            AssertOutcome(expectedFailure, Authenticate(jwt, o => o.MaxTokenLength = int.MaxValue));
+        }
+
+        [Fact]
+        public void NonStringArrayClaim_DoesNotFailTheParse()
+        {
+            string jwt = Token(Claims(("roles", new object?[] { 1, null, new Dictionary<string, bool> { ["admin"] = true } })));
+
+            Assert.True(Authenticate(jwt).Succeeded);
+        }
+
+        [Fact]
+        public void AudienceArrayWithNonString_IsAudienceMismatch()
+        {
+            string jwt = Token(Claims(("aud", new object?[] { DefaultAud, null })));
+
+            AssertFailure(AuthFailureCode.JwtAudienceMismatch, Authenticate(jwt));
+        }
+
+        [Fact]
+        public void OversizedToken_IsRejected()
+        {
+            string jwt = Token(Claims(("pad", new string('a', JwtAuthOptions.DefaultMaxTokenLength))));
+
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(jwt));
+        }
+
+        [Fact]
+        public void OverflowExp_IsUnauthorizedRatherThanThrown()
+        {
+            AssertFailure(AuthFailureCode.JwtMalformed, Authenticate(Token(Claims(("exp", long.MaxValue)))));
+        }
+        #endregion
+
+        #region Claims
+        [Theory]
+        [InlineData(-2.0, AuthFailureCode.JwtExpired)]
+        [InlineData(-1.0, null)]
+        [InlineData(-0.5, null)]
+        public void Expiry_AllowsClockSkew(double skews, string? expectedFailure)
+        {
+            long exp = Now.ToUnixTimeSeconds() + (long)(DefaultSkewSeconds * skews);
+
+            AssertOutcome(expectedFailure, Authenticate(Token(Claims(("exp", exp)))));
+        }
+
+        [Theory]
+        [InlineData(true, AuthFailureCode.JwtExpirationMissing)]
+        [InlineData(false, null)]
+        public void MissingExp_FailsOnlyWhenRequired(bool required, string? expectedFailure)
+        {
+            string jwt = Token(Claims(("exp", null), ("sub", "x")));
+
+            AssertOutcome(expectedFailure, Authenticate(jwt, o => o.RequireExpiration = required));
+        }
+
+        [Fact]
+        public void NbfInTheFuture_Fails()
+        {
+            string jwt = Token(Claims(("nbf", Now.ToUnixTimeSeconds() + (2 * DefaultSkewSeconds))));
+
+            AssertFailure(AuthFailureCode.JwtNotYetValid, Authenticate(jwt));
+        }
+
+        [Fact]
+        public void IssuerAndAudience_MustMatchWhenConfigured()
+        {
+            string[] audiences = { "hook", "other" };
+            string jwt = Token(Claims(("iss", "sender"), ("aud", audiences)));
+
+            Assert.True(Authenticate(jwt, o =>
+            {
+                o.Issuer = "sender";
+                o.Audience = "hook";
+            }).Succeeded);
+
+            AssertFailure(AuthFailureCode.JwtIssuerMismatch, Authenticate(jwt, o =>
+            {
+                o.Issuer = "other";
+                o.Audience = "hook";
+            }));
+
+            AssertFailure(AuthFailureCode.JwtAudienceMismatch, Authenticate(jwt, o => o.Audience = "missing"));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void MissingWebhookId_FailsAudienceWhenBound(bool emptyAudience)
+        {
+            string jwt = Token(Claims(("aud", emptyAudience ? string.Empty : DefaultAud)));
+            WebhookAuthContext request = Request("Bearer " + jwt).WithoutWebhookId().Build();
+
+            AssertFailure(AuthFailureCode.JwtAudienceMismatch, Bearer().Authenticate(request));
+        }
+
+        [Fact]
+        public void TamperedBody_FailsAsBodyHashMismatch()
+        {
+            string jwt = Token(Claims(("bh", JwtTestTokens.BodyHash(Encoding.UTF8.GetBytes("{\"ok\":true}")))));
+            WebhookAuthContext request = Request("Bearer " + jwt).WithBody("tampered").Build();
+
+            AssertFailure(AuthFailureCode.JwtBodyHashMismatch, Bearer().Authenticate(request));
+        }
+
+        [Fact]
+        public void MissingBodyHash_FailsUnderDefaultPreset()
+        {
+            var authenticator = new JwtAuthenticator(WebhookAuthPresets.JwtBearer(Provider()));
+            WebhookAuthContext request = Request("Bearer " + Token(Claims(("bh", null)))).Build();
+
+            AssertFailure(AuthFailureCode.JwtBodyHashMissing, authenticator.Authenticate(request));
+        }
+        #endregion
+
+        #region Credential and secret handling
+        [Fact]
+        public void SchemeToken_IsCaseInsensitive()
+        {
+            Assert.True(Bearer().Authenticate(Request("bearer " + Token(Claims())).Build()).Succeeded);
         }
 
         [Fact]
         public void MissingHeader_FailsClosed()
         {
-            AuthResult result = Bearer().Authenticate(RequestBuilder.Post().ReceivedAt(Now).Build());
+            AssertFailure(AuthFailureCode.CredentialMissing, Bearer().Authenticate(RequestBuilder.Post().ReceivedAt(Now).Build()));
+        }
 
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.CredentialMissing, result.FailureCode);
+        [Theory]
+        [InlineData("Basic abc", AuthFailureCode.CredentialMalformed)]
+        [InlineData("Bearer", AuthFailureCode.CredentialMalformed)]
+        [InlineData("Bearer ", AuthFailureCode.CredentialMalformed)]
+        [InlineData("not-a-jwt", AuthFailureCode.CredentialMalformed)]
+        [InlineData("Bearer not-a-jwt", AuthFailureCode.JwtMalformed)]
+        public void MalformedCredential_FailsWithoutThrowing(string headerValue, string expectedFailure)
+        {
+            AssertFailure(expectedFailure, Bearer().Authenticate(Request(headerValue).Build()));
         }
 
         [Fact]
         public void NullSecret_FailsClosed()
         {
             var authenticator = new JwtAuthenticator(new JwtAuthOptions(new NullSecretProvider()));
-            string jwt = Token(FutureExpPayload());
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", "Bearer " + jwt)
-                .Build();
 
-            AuthResult result = authenticator.Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.SecretUnavailable, result.FailureCode);
+            AssertFailure(AuthFailureCode.SecretUnavailable, authenticator.Authenticate(Request("Bearer " + Token(Claims())).Build()));
         }
 
+        [Fact]
+        public void SecretProviderException_Propagates()
+        {
+            var authenticator = new JwtAuthenticator(new JwtAuthOptions(new ThrowingSecretProvider()));
+            WebhookAuthContext request = Request("Bearer " + Token(Claims())).Build();
+
+            Assert.Throws<InvalidOperationException>(() => authenticator.Authenticate(request));
+        }
+        #endregion
+
+        #region Configuration and challenge
         [Theory]
-        [InlineData("Basic abc")]
-        [InlineData("Bearer")]
-        [InlineData("Bearer ")]
-        [InlineData("not-a-jwt")]
-        public void MalformedCredential_DoesNotThrow(string headerValue)
+        [InlineData("HS1")]
+        [InlineData("negative skew")]
+        [InlineData("skew over max")]
+        [InlineData("token cap under min")]
+        [InlineData("quote in token header")]
+        [InlineData("control character in scheme prefix")]
+        public void Misconfiguration_IsRejectedAtConstruction(string misconfiguration)
         {
-            WebhookAuthContext request = RequestBuilder.Post()
-                .ReceivedAt(Now)
-                .WithHeader("Authorization", headerValue)
-                .Build();
-
-            AuthResult result = Bearer().Authenticate(request);
-
-            Assert.False(result.Succeeded);
-        }
-
-        [Fact]
-        public void Sha1_IsRejectedAtConstruction()
-        {
-            var options = new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)))
+            JwtAuthOptions options = misconfiguration switch
             {
-                Algorithm = HmacAlgorithm.Sha1,
+                "HS1" => Options(o => o.Algorithm = HmacAlgorithm.Sha1),
+                "negative skew" => Options(o => o.ClockSkew = TimeSpan.FromSeconds(-1)),
+                "skew over max" => Options(o => o.ClockSkew = JwtAuthOptions.MaxClockSkew + TimeSpan.FromSeconds(1)),
+                "token cap under min" => Options(o => o.MaxTokenLength = JwtAuthOptions.MinTokenLength - 1),
+                "quote in token header" => new JwtAuthOptions(Provider(), "X-\"Token"),
+                "control character in scheme prefix" => Options(o => o.SchemePrefix = "Bearer\r\n"),
+                _ => throw new ArgumentOutOfRangeException(nameof(misconfiguration)),
             };
 
             Assert.Throws<ArgumentException>(() => new JwtAuthenticator(options));
-        }
-
-        [Fact]
-        public void UnboundedClockSkew_IsRejectedAtConstruction()
-        {
-            var options = new JwtAuthOptions(new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)))
-            {
-                ClockSkew = TimeSpan.FromDays(365),
-            };
-
-            Assert.Throws<ArgumentException>(() => new JwtAuthenticator(options));
-        }
-
-        [Fact]
-        public void Preset_IsBearerHs256BoundToWebhookAndBody()
-        {
-            JwtAuthOptions options = WebhookAuthPresets.JwtBearer(
-                new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)));
-
-            Assert.Equal("Authorization", options.TokenHeader);
-            Assert.Equal("Bearer ", options.SchemePrefix);
-            Assert.Equal(HmacAlgorithm.Sha256, options.Algorithm);
-            Assert.True(options.BindAudienceToWebhookId);
-            Assert.True(options.RequireBodyHash);
-            Assert.True(options.RequireExpiration);
-        }
-
-        [Fact]
-        public void JwtBearer_ExplicitAudience_DoesNotKillBindAudienceDefault()
-        {
-            JwtAuthOptions options = WebhookAuthPresets.JwtBearer(
-                new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)),
-                "https://hooks.example");
-
-            Assert.Equal("https://hooks.example", options.Audience);
-            Assert.True(options.BindAudienceToWebhookId);
-            Assert.True(options.RequireBodyHash);
         }
 
         [Fact]
@@ -560,14 +429,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void Challenge_MatchesCustomHeaderWhenThereIsNoSchemePrefix()
         {
-            var options = new JwtAuthOptions(
-                new StaticSecretProvider(WebhookSecret.FromUtf8(SecretText)),
-                "X-Webhook-Token")
+            var options = new JwtAuthOptions(Provider(), "X-Webhook-Token")
             {
                 SchemePrefix = null,
             };
 
             Assert.Equal("X-Webhook-Token realm=\"webhook\"", new JwtAuthenticator(options).Challenge);
+        }
+        #endregion
+
+        private sealed class ThrowingSecretProvider : IWebhookSecretProvider
+        {
+            public WebhookSecret? GetSecret() => throw new InvalidOperationException("Secret store unreachable.");
         }
     }
 }

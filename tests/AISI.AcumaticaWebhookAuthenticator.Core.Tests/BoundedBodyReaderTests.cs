@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using Xunit;
@@ -10,66 +11,52 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 {
     public class BoundedBodyReaderTests
     {
-        [Fact]
-        public async Task BodyUnderTheCap_IsReadCompletely()
+        private const int Cap = 2000;
+
+        [Theory]
+        [InlineData(Cap - 1000, true)]
+        [InlineData(Cap, true)]
+        [InlineData(Cap + 1, false)]
+        public async Task Body_IsReadOnlyWhenWithinTheCap(int length, bool withinLimit)
         {
-            byte[] body = Bytes(1000);
+            byte[] body = Bytes(length);
 
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(new DribbleStream(body), maxLength: Cap);
 
-            Assert.True(result.WithinLimit);
-            Assert.Equal(body, result.Body);
-        }
-
-        [Fact]
-        public async Task BodyExactlyAtTheCap_IsAccepted()
-        {
-            byte[] body = Bytes(2000);
-
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000);
-
-            Assert.True(result.WithinLimit);
-            Assert.Equal(body, result.Body);
-        }
-
-        [Fact]
-        public async Task BodyOverTheCap_IsRejectedWithNothingRetained()
-        {
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(2001)), maxLength: 2000);
-
-            Assert.False(result.WithinLimit);
-            Assert.Empty(result.Body);
-        }
-
-        [Fact]
-        public async Task BodyMuchLargerThanOneChunk_IsRejectedWithoutBuffering()
-        {
-            // 100k against a 2k cap: the reject must come from the running count, not from
-            // accumulating everything first.
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(100_000)), maxLength: 2000);
-
-            Assert.False(result.WithinLimit);
+            Assert.Equal(withinLimit, result.WithinLimit);
+            Assert.Equal(withinLimit ? body : Array.Empty<byte>(), result.Body);
         }
 
         [Fact]
         public async Task DeclaredLengthOverTheCap_RejectsWithoutReading()
         {
-            var source = new CountingStream(NonSeekable(Bytes(10)));
+            var source = new DribbleStream(Bytes(10));
 
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(source, maxLength: 2000, declaredLength: 5000);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(source, maxLength: Cap, declaredLength: Cap + 1);
 
             Assert.False(result.WithinLimit);
             Assert.Equal(0, source.ReadCalls);
         }
 
         [Fact]
+        public void DeclaredLength_DoesNotPreallocateTheWholeCap()
+        {
+            var source = new DribbleStream(Bytes(10));
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            Task<BoundedBodyRead> read = BoundedBodyReader.ReadAsync(source, declaredLength: BoundedBodyReader.DefaultMaxLength);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.True(read.IsCompletedSuccessfully);
+            Assert.True(allocated < BoundedBodyReader.MaxInitialCapacity * 2, $"{allocated} bytes allocated");
+        }
+
+        [Fact]
         public async Task UnderdeclaredLength_DoesNotTruncateTheActualBody()
         {
-            // A sender that declares 10 bytes and sends 1500 still gets the whole body read (the
-            // declared value is a capacity hint, not a limit) — and still gets capped by maxLength.
             byte[] body = Bytes(1500);
 
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000, declaredLength: 10);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(new DribbleStream(body), maxLength: Cap, declaredLength: 10);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
@@ -78,7 +65,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public async Task LyingDeclaredLength_DoesNotBypassTheCap()
         {
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Bytes(3000)), maxLength: 2000, declaredLength: 10);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(new DribbleStream(Bytes(Cap + 1000)), maxLength: Cap, declaredLength: 10);
 
             Assert.False(result.WithinLimit);
         }
@@ -88,7 +75,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         {
             byte[] body = Bytes(100);
 
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(body), maxLength: 2000, declaredLength: -1);
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(new DribbleStream(body), maxLength: Cap, declaredLength: -1);
 
             Assert.True(result.WithinLimit);
             Assert.Equal(body, result.Body);
@@ -97,7 +84,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public async Task EmptyBody_ReadsAsEmpty()
         {
-            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(NonSeekable(Array.Empty<byte>()));
+            BoundedBodyRead result = await BoundedBodyReader.ReadAsync(new DribbleStream(Array.Empty<byte>()));
 
             Assert.True(result.WithinLimit);
             Assert.Empty(result.Body);
@@ -107,7 +94,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public async Task NegativeCap_Throws()
         {
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-                () => BoundedBodyReader.ReadAsync(NonSeekable(Bytes(1)), maxLength: -1));
+                () => BoundedBodyReader.ReadAsync(new DribbleStream(Bytes(1)), maxLength: -1));
+        }
+
+        [Fact]
+        public void CompleteWithNullBody_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => BoundedBodyRead.Complete(null!));
         }
 
         private static byte[] Bytes(int count)
@@ -121,58 +114,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             return bytes;
         }
 
-        /// <summary>
-        /// Wraps the body so the reader sees what a chunked-transfer request stream looks like: no
-        /// Length, no Seek, and reads that return fewer bytes than asked for.
-        /// </summary>
-        private static DribbleStream NonSeekable(byte[] body) => new(body);
-
+        /// <summary>A chunked-transfer-like stream: no Length, no Seek, short reads, synchronous completion.</summary>
         private sealed class DribbleStream : Stream
         {
+            // Never aligns with the reader's chunk size.
+            private const int MaxReadSize = 700;
+
             private readonly byte[] _data;
             private int _position;
 
             public DribbleStream(byte[] data) => _data = data;
-
-            public override bool CanRead => true;
-
-            public override bool CanSeek => false;
-
-            public override bool CanWrite => false;
-
-            public override long Length => throw new NotSupportedException();
-
-            public override long Position
-            {
-                get => throw new NotSupportedException();
-                set => throw new NotSupportedException();
-            }
-
-            public override int Read(byte[] buffer, int offset, int count)
-            {
-                // At most 700 bytes per call, a size that never aligns with the reader's chunk.
-                int toCopy = Math.Min(Math.Min(count, 700), _data.Length - _position);
-                Array.Copy(_data, _position, buffer, offset, toCopy);
-                _position += toCopy;
-                return toCopy;
-            }
-
-            public override void Flush()
-            {
-            }
-
-            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-            public override void SetLength(long value) => throw new NotSupportedException();
-
-            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        }
-
-        private sealed class CountingStream : Stream
-        {
-            private readonly Stream _inner;
-
-            public CountingStream(Stream inner) => _inner = inner;
 
             public int ReadCalls { get; private set; }
 
@@ -190,11 +141,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 set => throw new NotSupportedException();
             }
 
-            public override int Read(byte[] buffer, int offset, int count)
+            public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+            public override int Read(Span<byte> buffer)
             {
                 ReadCalls++;
-                return _inner.Read(buffer, offset, count);
+                int toCopy = Math.Min(Math.Min(buffer.Length, MaxReadSize), _data.Length - _position);
+                _data.AsSpan(_position, toCopy).CopyTo(buffer);
+                _position += toCopy;
+                return toCopy;
             }
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+                Task.FromResult(Read(buffer, offset, count));
+
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+                new(Read(buffer.Span));
 
             public override void Flush()
             {
