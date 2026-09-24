@@ -37,7 +37,9 @@ database, maintained by an administrator on its own screen.
 - **Secrets managed in the ERP** — encrypted `[PXRSACryptString]` storage, a Modern UI
   maintenance screen (AS301000), per-webhook secrets, edits live within 30 seconds, no restart
 - **Zero-downtime secret rotation** — old and new secrets accepted until the overlap you set
-  expires
+  expires; **Generate Secret** and **Rotate Secret** on the screen, shown once and never again
+- **Secret encodings** — UTF-8 text, base64, hex, or Standard Webhooks (`whsec_`, Svix and
+  friends), per webhook
 - **Per-webhook IP allowlists** — IPv4/IPv6 CIDR, admin-configurable, for deployments behind a
   trusted proxy
 - **Security first** — constant-time comparison, fail-closed on missing secrets,
@@ -171,8 +173,17 @@ WebhookSecret secret = WebhookSecret
     .WithRotatingUtf8(previous, expiresOn: DateTimeOffset.UtcNow.AddDays(7));
 ```
 
-On the screen that's just the Rotating Secret and Rotation Ends (UTC) columns. Key material never
-leaves `WebhookSecret`; verification happens inside it.
+On the screen, **Rotate Secret** does it in one click: the saved secret moves to Rotating Secret,
+Rotation Ends (UTC) is set seven days out (edit it if you need longer), and a new random secret
+is shown once for you to paste into the sender. **Generate Secret** replaces the secret
+immediately, with no overlap — for a first secret, or a leaked one. Key material never leaves
+`WebhookSecret`; verification happens inside it.
+
+**Secret Encoding** says how the stored text becomes key bytes, for the current and rotating
+secret alike: *Text (UTF-8)* (the default, and what most dashboards mean), *Base64*, *Hex*, or
+*Standard Webhooks* (`whsec_` plus base64). In code, `WebhookSecret.Parse(text, encoding)`, and
+`SecretGenerator.Generate(encoding)` for a fresh one. Changing the encoding re-checks the saved
+secrets; one that no longer decodes is refused on save rather than at request time.
 
 > **Encryption at rest requires a site certificate.** Without one, `[PXRSACryptString]` degrades
 > to base64 obfuscation. Configure an encryption certificate (SM200530) on any instance whose

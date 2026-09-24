@@ -11,6 +11,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     public sealed class WebhookSecret
     {
         #region Construction and state
+        /// <summary>The prefix Standard Webhooks senders put in front of the base64 key.</summary>
+        public const string StandardWebhooksPrefix = "whsec_";
+
         private readonly byte[] _current;
         private readonly byte[]? _rotating;
         private readonly DateTimeOffset? _rotatingExpiresOn;
@@ -64,15 +67,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <param name="current">Hex-encoded secret.</param>
         /// <returns>The secret.</returns>
         /// <exception cref="FormatException">The value is not valid hex.</exception>
-        public static WebhookSecret FromHex(string current)
-        {
-            if (!SignatureCodec.TryDecode(current, SignatureEncoding.Hex, out byte[] bytes))
-            {
-                throw new FormatException("The secret is not valid hexadecimal.");
-            }
-
-            return new WebhookSecret(bytes, null, null);
-        }
+        public static WebhookSecret FromHex(string current) =>
+            new WebhookSecret(DecodeOrThrow(current, SignatureEncoding.Hex, "hexadecimal"), null, null);
 
         /// <summary>
         /// Creates a secret from a base64-encoded key.
@@ -80,15 +76,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <param name="current">Base64-encoded secret.</param>
         /// <returns>The secret.</returns>
         /// <exception cref="FormatException">The value is not valid base64.</exception>
-        public static WebhookSecret FromBase64(string current)
-        {
-            if (!SignatureCodec.TryDecode(current, SignatureEncoding.Base64, out byte[] bytes))
-            {
-                throw new FormatException("The secret is not valid base64.");
-            }
+        public static WebhookSecret FromBase64(string current) =>
+            new WebhookSecret(DecodeOrThrow(current, SignatureEncoding.Base64, "base64"), null, null);
 
-            return new WebhookSecret(bytes, null, null);
-        }
+        /// <summary>
+        /// Creates a secret from its text form under <paramref name="encoding"/>.
+        /// </summary>
+        /// <param name="current">The active secret's text form.</param>
+        /// <param name="encoding">How the text maps to key bytes.</param>
+        /// <returns>The secret.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="current"/> is null.</exception>
+        /// <exception cref="FormatException">The text is not valid under <paramref name="encoding"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="encoding"/> is undefined.</exception>
+        public static WebhookSecret Parse(string current, SecretEncoding encoding) =>
+            new WebhookSecret(Decode(current, encoding, nameof(current)), null, null);
         #endregion
 
         #region Rotation
@@ -128,6 +129,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             return new WebhookSecret(_current, Encoding.UTF8.GetBytes(rotating), expiresOn);
         }
+
+        /// <summary>
+        /// Returns a copy of this secret with a rotating counterpart in its text form under
+        /// <paramref name="encoding"/>.
+        /// </summary>
+        /// <param name="rotating">The other secret accepted during the overlap.</param>
+        /// <param name="encoding">How the text maps to key bytes.</param>
+        /// <param name="expiresOn">When the overlap ends.</param>
+        /// <returns>A new secret carrying the overlap.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="rotating"/> is null.</exception>
+        /// <exception cref="FormatException">The text is not valid under <paramref name="encoding"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="encoding"/> is undefined.</exception>
+        public WebhookSecret WithRotating(string rotating, SecretEncoding encoding, DateTimeOffset expiresOn) =>
+            new WebhookSecret(_current, Decode(rotating, encoding, nameof(rotating)), expiresOn);
         #endregion
 
         #region Verification
@@ -263,6 +278,45 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             var copy = new byte[source.Length];
             Buffer.BlockCopy(source, 0, copy, 0, source.Length);
             return copy;
+        }
+
+        private static byte[] Decode(string text, SecretEncoding encoding, string parameterName)
+        {
+            if (text is null)
+            {
+                throw new ArgumentNullException(parameterName);
+            }
+
+            switch (encoding)
+            {
+                case SecretEncoding.Utf8:
+                    return Encoding.UTF8.GetBytes(text);
+
+                case SecretEncoding.Base64:
+                    return DecodeOrThrow(text, SignatureEncoding.Base64, "base64");
+
+                case SecretEncoding.Hex:
+                    return DecodeOrThrow(text, SignatureEncoding.Hex, "hexadecimal");
+
+                case SecretEncoding.StandardWebhooks:
+                    string key = text.StartsWith(StandardWebhooksPrefix, StringComparison.Ordinal)
+                        ? text.Substring(StandardWebhooksPrefix.Length)
+                        : text;
+                    return DecodeOrThrow(key, SignatureEncoding.Base64, "a Standard Webhooks (whsec_) secret");
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(encoding), encoding, "Unknown secret encoding.");
+            }
+        }
+
+        private static byte[] DecodeOrThrow(string text, SignatureEncoding encoding, string description)
+        {
+            if (!SignatureCodec.TryDecode(text, encoding, out byte[] bytes))
+            {
+                throw new FormatException("The secret is not valid " + description + ".");
+            }
+
+            return bytes;
         }
 
         private IEnumerable<byte[]> LiveKeys(DateTimeOffset asOf)

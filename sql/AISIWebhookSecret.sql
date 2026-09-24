@@ -13,6 +13,7 @@ CREATE TABLE [dbo].[AISIWebhookSecret] (
     [CompanyID]              INT              NOT NULL DEFAULT 0,
     [WebHookID]              UNIQUEIDENTIFIER NOT NULL,
     [Secret]                 NVARCHAR(2048)   NULL,
+    [SecretEncoding]         CHAR(1)          NULL,
     [RotatingSecret]         NVARCHAR(2048)   NULL,
     [RotatingExpiresOn]      DATETIME         NULL,
     [AllowedAddresses]       VARCHAR(500)     NULL,
@@ -29,3 +30,7 @@ CREATE TABLE [dbo].[AISIWebhookSecret] (
 
     CONSTRAINT [AISIWebhookSecret_PK] PRIMARY KEY CLUSTERED ([CompanyID], [WebHookID])
 );
+
+-- Upgrade from 0.2.x. NULL reads as UTF-8, the previous behaviour.
+IF COL_LENGTH('dbo.AISIWebhookSecret', 'SecretEncoding') IS NULL
+    ALTER TABLE [dbo].[AISIWebhookSecret] ADD [SecretEncoding] CHAR(1) NULL;

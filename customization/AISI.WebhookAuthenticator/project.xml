@@ -64,6 +64,7 @@
     <col name="CompanyID" type="Int" default="Zero" />
     <col name="WebHookID" type="UniqueIdentifier" />
     <col name="Secret" type="NVarChar(2048)" nullable="true" />
+    <col name="SecretEncoding" type="Char(1)" nullable="true" />
     <col name="RotatingSecret" type="NVarChar(2048)" nullable="true" />
     <col name="RotatingExpiresOn" type="DateTime" nullable="true" />
     <col name="AllowedAddresses" type="VarChar(500)" nullable="true" />

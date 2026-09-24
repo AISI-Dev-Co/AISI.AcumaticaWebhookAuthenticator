@@ -131,7 +131,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         private Lazy<CacheEntry> CreateEntry((string Company, Guid WebhookId) key) =>
             new Lazy<CacheEntry>(Load, LazyThreadSafetyMode.ExecutionAndPublication);
 
-        private CacheEntry Load()
+        /// <summary>Reads a webhook's row with the crypt fields decrypted. Never display the result.</summary>
+        internal static AISIWebhookSecret? SelectDecrypted(Guid webhookId)
         {
             var graph = PXGraph.CreateInstance<PXGraph>();
             PXCache cache = graph.Caches[typeof(AISIWebhookSecret)];
@@ -139,10 +140,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             PXDBCryptStringAttribute.SetDecrypted<AISIWebhookSecret.secret>(cache, true);
             PXDBCryptStringAttribute.SetDecrypted<AISIWebhookSecret.rotatingSecret>(cache, true);
 
-            AISIWebhookSecret? row = PXSelectReadonly<
+            return PXSelectReadonly<
                     AISIWebhookSecret,
                     Where<AISIWebhookSecret.webHookID, Equal<Required<AISIWebhookSecret.webHookID>>>>
-                .Select(graph, _webhookId);
+                .Select(graph, webhookId);
+        }
+
+        private CacheEntry Load()
+        {
+            AISIWebhookSecret? row = SelectDecrypted(_webhookId);
 
             // Stamped after the query, not before it: a slow query stamped early would produce an
             // entry already near expiry, and a refresh that immediately re-refreshes.
@@ -157,13 +163,26 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!string.IsNullOrEmpty(row.Secret))
             {
-                secret = WebhookSecret.FromUtf8(row.Secret!);
-
-                if (!string.IsNullOrEmpty(row.RotatingSecret) && row.RotatingExpiresOn is object)
+                try
                 {
-                    secret = secret.WithRotatingUtf8(
-                        row.RotatingSecret!,
-                        new DateTimeOffset(DateTime.SpecifyKind(row.RotatingExpiresOn.Value, DateTimeKind.Utc)));
+                    SecretEncoding encoding = SecretEncodingListAttribute.ToEncoding(row.SecretEncoding);
+                    secret = WebhookSecret.Parse(row.Secret!, encoding);
+
+                    if (!string.IsNullOrEmpty(row.RotatingSecret) && row.RotatingExpiresOn is object)
+                    {
+                        secret = secret.WithRotating(
+                            row.RotatingSecret!,
+                            encoding,
+                            new DateTimeOffset(DateTime.SpecifyKind(row.RotatingExpiresOn.Value, DateTimeKind.Utc)));
+                    }
+                }
+                catch (FormatException failure)
+                {
+                    secret = null;
+                    PXTrace.WriteError(
+                        "Webhook {0}: the stored secret could not be decoded and all requests will be denied until it is fixed on the webhook secrets screen. {1}",
+                        _webhookId,
+                        failure.Message);
                 }
             }
 

@@ -64,6 +64,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         public abstract class secret : BqlString.Field<secret> { }
         #endregion
 
+        #region SecretEncoding
+        /// <summary>How <see cref="Secret"/> and <see cref="RotatingSecret"/> map to key bytes.</summary>
+        [PXDBString(1, IsFixed = true, IsUnicode = false)]
+        [PXDefault(SecretEncodingListAttribute.Utf8, PersistingCheck = PXPersistingCheck.Nothing)]
+        [SecretEncodingList]
+        [PXUIField(DisplayName = "Secret Encoding")]
+        public virtual string? SecretEncoding { get; set; }
+        public abstract class secretEncoding : BqlString.Field<secretEncoding> { }
+        #endregion
+
         #region RotatingSecret
         /// <summary>
         /// The outgoing secret during a rotation overlap, accepted alongside
