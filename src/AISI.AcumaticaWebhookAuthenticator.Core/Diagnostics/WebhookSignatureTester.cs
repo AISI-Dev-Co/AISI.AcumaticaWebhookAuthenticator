@@ -11,9 +11,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
     /// <summary>Explains an HMAC mismatch. Contains expected signatures — never return this over HTTP.</summary>
     public static class WebhookSignatureTester
     {
-        /// <summary>
-        /// Runs verification and reports the intermediate values.
-        /// </summary>
+        /// <summary>Runs verification and reports the intermediate values.</summary>
         /// <param name="options">The configuration to test.</param>
         /// <param name="context">A captured request to test it against.</param>
         /// <returns>The report.</returns>
@@ -30,8 +28,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 throw new ArgumentNullException(nameof(context));
             }
 
-            // Reported, not thrown. Constructing the authenticator would throw here, and a tool whose
-            // job is explaining why verification failed should not crash on the most common reason.
+            // Reported rather than thrown: explaining a bad configuration is this tool's job.
             string? problem = options.DescribeMisconfiguration();
             if (problem is object)
             {
@@ -47,49 +44,30 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
             string? timestampRaw = null;
             var expected = new List<string>();
 
-            if (options.Timestamp is object && options.Timestamp.ReadsFromSignatureHeader)
+            foreach (HmacAuthenticator.SignatureGroup group in HmacAuthenticator.GroupCandidates(
+                context,
+                headerValues,
+                options.Extraction,
+                options.Timestamp))
             {
-                // Mirrors the authenticator: each header value carries its own timestamp, so each
-                // produces its own signed payload and its own acceptable signatures. Reporting only
-                // the first value's would show a legitimate match against the second value beside
-                // expected signatures it cannot equal.
-                foreach (string headerValue in headerValues)
-                {
-                    string? valueTimestamp = options.Timestamp.ReadRaw(context, new[] { headerValue });
-                    timestampRaw ??= valueTimestamp;
-
-                    TemplateResolution resolution = options.Template.Resolve(
-                        context,
-                        valueTimestamp,
-                        capturePreview: true);
-
-                    if (!resolution.Success)
-                    {
-                        continue;
-                    }
-
-                    if (preview.Length == 0)
-                    {
-                        preview = resolution.Preview;
-                    }
-
-                    AppendExpected(expected, options, secret, context, resolution);
-                }
-            }
-            else
-            {
-                timestampRaw = options.Timestamp?.ReadRaw(context, headerValues);
+                timestampRaw ??= group.TimestampRaw;
 
                 TemplateResolution resolution = options.Template.Resolve(
                     context,
-                    timestampRaw,
+                    group.TimestampRaw,
                     capturePreview: true);
 
-                if (resolution.Success)
+                if (!resolution.Success)
+                {
+                    continue;
+                }
+
+                if (preview.Length == 0)
                 {
                     preview = resolution.Preview;
-                    AppendExpected(expected, options, secret, context, resolution);
                 }
+
+                AppendExpected(expected, options, secret, context, resolution);
             }
 
             return new SignatureTestReport(
