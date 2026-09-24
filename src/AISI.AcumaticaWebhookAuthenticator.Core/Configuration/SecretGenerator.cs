@@ -29,7 +29,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         {
             if (byteLength < MinByteLength)
             {
-                throw new ArgumentOutOfRangeException(nameof(byteLength), byteLength, "A secret needs at least 16 random bytes.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(byteLength),
+                    byteLength,
+                    FormattableString.Invariant($"A secret needs at least {MinByteLength} random bytes."));
             }
 
             var key = new byte[byteLength];

@@ -45,31 +45,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         /// <summary>The template string this was parsed from.</summary>
         public string Pattern { get; }
 
-        /// <summary>
-        /// Whether the template includes a <c>{timestamp}</c> token, and therefore whether a replay
-        /// window over that timestamp would actually be covered by the signature.
-        /// </summary>
+        /// <summary>Whether the template includes a <c>{timestamp}</c> token, so a replay window would be signed.</summary>
         public bool ReferencesTimestamp { get; }
 
-        /// <summary>
-        /// Whether the template includes a <c>{path}</c> token, which a host with no request path
-        /// should reject at construction rather than fail per request.
-        /// </summary>
+        /// <summary>Whether the template includes a <c>{path}</c> token, which a host with no request path cannot supply.</summary>
         public bool ReferencesPath { get; }
         #endregion
 
         #region Parsing
-        /// <summary>
-        /// Parses a template.
-        /// </summary>
-        /// <param name="pattern">Template string.</param>
+        /// <summary>Parses a template.</summary>
+        /// <param name="pattern">Template string. <c>{{</c> and <c>}}</c> are literal braces.</param>
         /// <returns>The parsed template.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="pattern"/> is null.</exception>
-        /// <exception cref="FormatException">
-        /// The template is malformed or names a token that does not exist. This throws rather than
-        /// failing at request time because a bad template is a developer error that should surface
-        /// when the handler is constructed, not as a puzzling 401 in production.
-        /// </exception>
+        /// <exception cref="FormatException">The template is malformed or names a token that does not exist.</exception>
         public static SignedPayloadTemplate Parse(string pattern)
         {
             if (pattern is null)
@@ -119,7 +107,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
                 if (literal.Length > 0)
                 {
-                    segments.Add(Segment.ForLiteral(literal.ToString()));
+                    segments.Add(new Segment(SegmentKind.Literal, literal.ToString()));
                     literal.Clear();
                 }
 
@@ -129,7 +117,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
             if (literal.Length > 0)
             {
-                segments.Add(Segment.ForLiteral(literal.ToString()));
+                segments.Add(new Segment(SegmentKind.Literal, literal.ToString()));
             }
 
             return new SignedPayloadTemplate(pattern, segments);
@@ -137,21 +125,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         #endregion
 
         #region Resolution
-        /// <summary>
-        /// Resolves the template against a request.
-        /// </summary>
+        /// <summary>Resolves the template against a request.</summary>
         /// <param name="context">The request being authenticated.</param>
         /// <param name="timestampRaw">
-        /// The timestamp exactly as it appeared on the wire, or <see langword="null"/> when the scheme
-        /// has no timestamp. The raw form matters: a sender signs the characters it sent, so
-        /// re-formatting a parsed timestamp would produce a different signed payload.
+        /// The timestamp exactly as sent, or <see langword="null"/> when the scheme has none. Never
+        /// re-format it: the sender signed the characters it sent.
         /// </param>
-        /// <param name="capturePreview">
-        /// Whether to build the human-readable rendering as well. Off by default: the preview decodes
-        /// the entire body to a string, which on the verification path is a full extra copy of every
-        /// payload allocated for a diagnostic nobody reads. Only
-        /// <see cref="Diagnostics.WebhookSignatureTester"/> asks for it.
-        /// </param>
+        /// <param name="capturePreview">Whether to build <see cref="TemplateResolution.Preview"/> too; a full body copy, so off on the request path.</param>
         /// <returns>The resolution, successful or otherwise.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
         public TemplateResolution Resolve(WebhookAuthContext context, string? timestampRaw, bool capturePreview = false)
@@ -161,10 +141,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 throw new ArgumentNullException(nameof(context));
             }
 
-            // The single-{body} template is the overwhelmingly common case (GitHub, Shopify) and
-            // needs no composition at all: the signed payload IS the request body. Handing the
-            // buffer back avoids copying every payload on the hot path - which the deliberate
-            // refusal to defensively copy WebhookAuthContext.Body would otherwise be undone by.
+            // A bare {body} aliases the request buffer rather than copying every payload on the hot path.
             if (_segments.Count == 1 && _segments[0].Kind == SegmentKind.Body)
             {
                 return TemplateResolution.Succeeded(
@@ -180,10 +157,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 {
                     if (segment.Kind == SegmentKind.Body)
                     {
+                        // The raw bytes are signed; the lossy UTF-8 decode is only for display.
                         buffer.Write(context.Body, 0, context.Body.Length);
-
-                        // Lossy by design, and only ever for display: the digest is computed from
-                        // the bytes written above, never from this string.
                         preview?.Append(Encoding.UTF8.GetString(context.Body));
                         continue;
                     }
@@ -211,6 +186,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
             out string text,
             out string failureCode)
         {
+            text = string.Empty;
             failureCode = string.Empty;
 
             switch (segment.Kind)
@@ -222,7 +198,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 case SegmentKind.Timestamp:
                     if (timestampRaw is null)
                     {
-                        text = string.Empty;
                         failureCode = AuthFailureCode.TimestampMissing;
                         return false;
                     }
@@ -233,7 +208,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 case SegmentKind.Method:
                     if (context.Method is null)
                     {
-                        text = string.Empty;
                         failureCode = AuthFailureCode.TemplateMethodUnavailable;
                         return false;
                     }
@@ -244,7 +218,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 case SegmentKind.Path:
                     if (context.Path is null)
                     {
-                        text = string.Empty;
                         failureCode = AuthFailureCode.TemplatePathUnavailable;
                         return false;
                     }
@@ -253,12 +226,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     return true;
 
                 case SegmentKind.Header:
-                    // A template naming a header the sender did not send fails resolution outright
-                    // rather than substituting an empty string. Both end in a 401, but this way the
-                    // trace says which header was missing instead of reporting an opaque mismatch.
+                    // Fail rather than substitute "" so the trace names the missing header.
                     if (!context.TryGetHeader(segment.Value, out string headerValue))
                     {
-                        text = string.Empty;
                         failureCode = AuthFailureCode.TemplateHeaderMissing;
                         return false;
                     }
@@ -267,14 +237,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     return true;
 
                 default:
-                    text = string.Empty;
-                    failureCode = AuthFailureCode.TemplateInvalid;
-                    return false;
+                    throw new InvalidOperationException(
+                        FormattableString.Invariant($"Segment kind '{segment.Kind}' is not a scalar."));
             }
         }
 
-        private static Segment ParseToken(string token)
+        private static Segment ParseToken(string rawToken)
         {
+            string token = rawToken.Trim();
+
             if (token.StartsWith("header:", StringComparison.OrdinalIgnoreCase))
             {
                 string headerName = token.Substring("header:".Length).Trim();
@@ -283,25 +254,25 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     throw new FormatException("The {header:Name} token requires a header name.");
                 }
 
-                return Segment.ForHeader(headerName);
+                return new Segment(SegmentKind.Header, headerName);
             }
 
-            switch (token.Trim().ToLowerInvariant())
+            switch (token.ToLowerInvariant())
             {
                 case "body":
-                    return Segment.ForKind(SegmentKind.Body);
+                    return new Segment(SegmentKind.Body, string.Empty);
                 case "timestamp":
-                    return Segment.ForKind(SegmentKind.Timestamp);
+                    return new Segment(SegmentKind.Timestamp, string.Empty);
                 case "method":
-                    return Segment.ForKind(SegmentKind.Method);
+                    return new Segment(SegmentKind.Method, string.Empty);
                 case "path":
-                    return Segment.ForKind(SegmentKind.Path);
+                    return new Segment(SegmentKind.Path, string.Empty);
                 default:
                     throw new FormatException(
                         string.Format(
                             CultureInfo.InvariantCulture,
                             "Unknown token '{{{0}}}' in signed-payload template. Supported tokens are {{body}}, {{timestamp}}, {{method}}, {{path}} and {{header:Name}}.",
-                            token));
+                            rawToken));
             }
         }
 
@@ -317,7 +288,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
         private readonly struct Segment
         {
-            private Segment(SegmentKind kind, string value)
+            public Segment(SegmentKind kind, string value)
             {
                 Kind = kind;
                 Value = value;
@@ -326,12 +297,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
             public SegmentKind Kind { get; }
 
             public string Value { get; }
-
-            public static Segment ForLiteral(string value) => new Segment(SegmentKind.Literal, value);
-
-            public static Segment ForHeader(string name) => new Segment(SegmentKind.Header, name);
-
-            public static Segment ForKind(SegmentKind kind) => new Segment(kind, string.Empty);
         }
         #endregion
     }

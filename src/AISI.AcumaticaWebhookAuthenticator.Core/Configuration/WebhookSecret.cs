@@ -27,129 +27,69 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Creation
-        /// <summary>
-        /// Creates a secret from raw key bytes. The array is copied, so later mutation by the caller
-        /// cannot change what this secret verifies against.
-        /// </summary>
+        /// <summary>Creates a secret from raw key bytes, which are copied.</summary>
         /// <param name="current">The active secret.</param>
         /// <returns>The secret.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="current"/> is null.</exception>
-        public static WebhookSecret FromBytes(byte[] current)
-        {
-            if (current is null)
-            {
-                throw new ArgumentNullException(nameof(current));
-            }
+        /// <exception cref="ArgumentException"><paramref name="current"/> is empty.</exception>
+        public static WebhookSecret FromBytes(byte[] current) =>
+            new WebhookSecret(CopyKey(current, nameof(current)), null, null);
 
-            return new WebhookSecret(Copy(current), null, null);
-        }
-
-        /// <summary>
-        /// Creates a secret from its UTF-8 text form. This is what most senders mean by a
-        /// "signing secret" or "webhook secret" pasted from a dashboard.
-        /// </summary>
+        /// <summary>Creates a secret from its UTF-8 text form, as pasted from most sender dashboards.</summary>
         /// <param name="current">The active secret.</param>
         /// <returns>The secret.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="current"/> is null.</exception>
-        public static WebhookSecret FromUtf8(string current)
-        {
-            if (current is null)
-            {
-                throw new ArgumentNullException(nameof(current));
-            }
+        /// <exception cref="FormatException"><paramref name="current"/> is empty.</exception>
+        public static WebhookSecret FromUtf8(string current) => Parse(current, SecretEncoding.Utf8);
 
-            return new WebhookSecret(Encoding.UTF8.GetBytes(current), null, null);
-        }
-
-        /// <summary>
-        /// Creates a secret from a hex-encoded key.
-        /// </summary>
-        /// <param name="current">Hex-encoded secret.</param>
-        /// <returns>The secret.</returns>
-        /// <exception cref="FormatException">The value is not valid hex.</exception>
-        public static WebhookSecret FromHex(string current) =>
-            new WebhookSecret(DecodeOrThrow(current, SignatureEncoding.Hex, "hexadecimal"), null, null);
-
-        /// <summary>
-        /// Creates a secret from a base64-encoded key.
-        /// </summary>
-        /// <param name="current">Base64-encoded secret.</param>
-        /// <returns>The secret.</returns>
-        /// <exception cref="FormatException">The value is not valid base64.</exception>
-        public static WebhookSecret FromBase64(string current) =>
-            new WebhookSecret(DecodeOrThrow(current, SignatureEncoding.Base64, "base64"), null, null);
-
-        /// <summary>
-        /// Creates a secret from its text form under <paramref name="encoding"/>.
-        /// </summary>
+        /// <summary>Creates a secret from its text form under <paramref name="encoding"/>.</summary>
         /// <param name="current">The active secret's text form.</param>
         /// <param name="encoding">How the text maps to key bytes.</param>
         /// <returns>The secret.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="current"/> is null.</exception>
-        /// <exception cref="FormatException">The text is not valid under <paramref name="encoding"/>.</exception>
+        /// <exception cref="FormatException">
+        /// The text is not valid under <paramref name="encoding"/>, or decodes to an empty key.
+        /// </exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="encoding"/> is undefined.</exception>
         public static WebhookSecret Parse(string current, SecretEncoding encoding) =>
             new WebhookSecret(Decode(current, encoding, nameof(current)), null, null);
         #endregion
 
         #region Rotation
-        /// <summary>
-        /// Returns a copy of this secret with a rotating counterpart valid until an expiry.
-        /// </summary>
-        /// <param name="rotating">The other secret accepted during the overlap.</param>
-        /// <param name="expiresOn">
-        /// When the overlap ends. After this instant the rotating secret is no longer accepted, so a
-        /// forgotten rotation closes itself rather than leaving a retired secret live indefinitely.
-        /// </param>
+        /// <summary>Returns a copy of this secret that also accepts <paramref name="rotating"/> until <paramref name="expiresOn"/>.</summary>
+        /// <param name="rotating">The other secret accepted during the overlap. Copied.</param>
+        /// <param name="expiresOn">When the overlap ends, so a forgotten rotation closes itself.</param>
         /// <returns>A new secret carrying the overlap.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rotating"/> is null.</exception>
-        public WebhookSecret WithRotating(byte[] rotating, DateTimeOffset expiresOn)
-        {
-            if (rotating is null)
-            {
-                throw new ArgumentNullException(nameof(rotating));
-            }
+        /// <exception cref="ArgumentException"><paramref name="rotating"/> is empty.</exception>
+        public WebhookSecret WithRotating(byte[] rotating, DateTimeOffset expiresOn) =>
+            new WebhookSecret(_current, CopyKey(rotating, nameof(rotating)), expiresOn);
 
-            return new WebhookSecret(_current, Copy(rotating), expiresOn);
-        }
-
-        /// <summary>
-        /// Returns a copy of this secret with a rotating counterpart supplied as UTF-8 text.
-        /// </summary>
+        /// <summary>Returns a copy of this secret with a rotating counterpart supplied as UTF-8 text.</summary>
         /// <param name="rotating">The other secret accepted during the overlap.</param>
         /// <param name="expiresOn">When the overlap ends.</param>
         /// <returns>A new secret carrying the overlap.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rotating"/> is null.</exception>
-        public WebhookSecret WithRotatingUtf8(string rotating, DateTimeOffset expiresOn)
-        {
-            if (rotating is null)
-            {
-                throw new ArgumentNullException(nameof(rotating));
-            }
+        /// <exception cref="FormatException"><paramref name="rotating"/> is empty.</exception>
+        public WebhookSecret WithRotatingUtf8(string rotating, DateTimeOffset expiresOn) =>
+            WithRotating(rotating, SecretEncoding.Utf8, expiresOn);
 
-            return new WebhookSecret(_current, Encoding.UTF8.GetBytes(rotating), expiresOn);
-        }
-
-        /// <summary>
-        /// Returns a copy of this secret with a rotating counterpart in its text form under
-        /// <paramref name="encoding"/>.
-        /// </summary>
+        /// <summary>Returns a copy of this secret with a rotating counterpart in its text form under <paramref name="encoding"/>.</summary>
         /// <param name="rotating">The other secret accepted during the overlap.</param>
         /// <param name="encoding">How the text maps to key bytes.</param>
         /// <param name="expiresOn">When the overlap ends.</param>
         /// <returns>A new secret carrying the overlap.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rotating"/> is null.</exception>
-        /// <exception cref="FormatException">The text is not valid under <paramref name="encoding"/>.</exception>
+        /// <exception cref="FormatException">
+        /// The text is not valid under <paramref name="encoding"/>, or decodes to an empty key.
+        /// </exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="encoding"/> is undefined.</exception>
         public WebhookSecret WithRotating(string rotating, SecretEncoding encoding, DateTimeOffset expiresOn) =>
             new WebhookSecret(_current, Decode(rotating, encoding, nameof(rotating)), expiresOn);
         #endregion
 
         #region Verification
-        /// <summary>
-        /// Whether <paramref name="providedDigest"/> is a valid signature of
-        /// <paramref name="message"/> under any secret live at <paramref name="asOf"/>.
-        /// </summary>
+        /// <summary>Whether <paramref name="providedDigest"/> signs <paramref name="message"/> under any secret live at <paramref name="asOf"/>.</summary>
         /// <param name="algorithm">Hash algorithm.</param>
         /// <param name="message">The exact bytes the sender signed.</param>
         /// <param name="providedDigest">The digest supplied on the request.</param>
@@ -159,21 +99,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         public bool Matches(HmacAlgorithm algorithm, byte[] message, byte[]? providedDigest, DateTimeOffset asOf) =>
             MatchesAny(algorithm, message, new[] { providedDigest }, asOf);
 
-        /// <summary>
-        /// Whether any of <paramref name="providedDigests"/> is a valid signature of
-        /// <paramref name="message"/> under any secret live at <paramref name="asOf"/>.
-        /// </summary>
+        /// <summary>Whether any of <paramref name="providedDigests"/> signs <paramref name="message"/> under any secret live at <paramref name="asOf"/>.</summary>
         /// <param name="algorithm">Hash algorithm.</param>
         /// <param name="message">The exact bytes the sender signed.</param>
         /// <param name="providedDigests">Every digest offered on the request.</param>
         /// <param name="asOf">The instant to evaluate the rotation window against.</param>
         /// <returns><see langword="true"/> when any pairing is valid.</returns>
-        /// <remarks>
-        /// Takes the whole candidate set at once so each key is hashed exactly once. Verifying one
-        /// candidate at a time recomputed the same digest per candidate — four HMACs for a Stripe
-        /// request carrying two <c>v1</c> elements during a rotation overlap — and made the work
-        /// done visible in the candidate count rather than fixed by configuration.
-        /// </remarks>
         /// <exception cref="ArgumentNullException">
         /// <paramref name="message"/> or <paramref name="providedDigests"/> is null.
         /// </exception>
@@ -195,9 +126,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             bool matched = false;
 
-            // Deliberately not short-circuited, in either loop. Returning on the first hit would
-            // make a request signed with the current secret measurably faster than one signed with
-            // the rotating secret, which tells an observer which is which.
+            // Not short-circuited: an early return would time-leak which secret (current or rotating) matched.
             foreach (byte[] key in LiveKeys(asOf))
             {
                 byte[] expected = HmacComputer.Compute(algorithm, key, message);
@@ -211,22 +140,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return matched;
         }
 
-        /// <summary>
-        /// Whether <paramref name="provided"/> is byte-for-byte equal to any secret live at
-        /// <paramref name="asOf"/> — direct credential comparison, no hashing, for the schemes
-        /// where the caller presents the secret itself (<c>SECRET</c>, <c>BASIC</c>).
-        /// </summary>
+        /// <summary>Whether <paramref name="provided"/> equals any secret live at <paramref name="asOf"/>, for schemes that send the secret itself.</summary>
         /// <param name="provided">The credential supplied on the request. Null never matches.</param>
         /// <param name="asOf">The instant to evaluate the rotation window against.</param>
-        /// <remarks>
-        /// Fixed-time per candidate and not short-circuited across the current and rotating
-        /// secrets, for the same reason as <see cref="MatchesAny"/>. Per the
-        /// <see cref="Signing.FixedTimeComparer"/> contract, lengths are not secret.
-        /// </remarks>
+        /// <returns><see langword="true"/> when the credential matches.</returns>
         public bool MatchesValue(byte[]? provided, DateTimeOffset asOf)
         {
             bool matched = false;
 
+            // Not short-circuited, for the same reason as MatchesAny.
             foreach (byte[] key in LiveKeys(asOf))
             {
                 matched |= FixedTimeComparer.AreEqual(key, provided);
@@ -237,19 +159,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Diagnostics
-        /// <summary>
-        /// Computes the digests this secret would produce, for display by
-        /// <see cref="Diagnostics.WebhookSignatureTester"/>.
-        /// </summary>
+        /// <summary>The digests each live secret would produce. For administrators only; never expose over HTTP.</summary>
         /// <param name="algorithm">Hash algorithm.</param>
         /// <param name="message">The bytes to sign.</param>
         /// <param name="asOf">The instant to evaluate the rotation window against.</param>
         /// <returns>One digest per live secret: the current one first, then the rotating one.</returns>
-        /// <remarks>
-        /// This is the only member that yields anything derived from the key to a caller, and it
-        /// exists solely so an administrator with access to the secret can see why a signature did
-        /// not match. Never expose its output over HTTP.
-        /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
         public IReadOnlyList<byte[]> ComputeDiagnosticDigests(
             HmacAlgorithm algorithm,
@@ -273,11 +187,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Internals
-        private static byte[] Copy(byte[] source)
+        private static byte[] CopyKey(byte[] source, string parameterName)
         {
-            var copy = new byte[source.Length];
-            Buffer.BlockCopy(source, 0, copy, 0, source.Length);
-            return copy;
+            if (source is null)
+            {
+                throw new ArgumentNullException(parameterName);
+            }
+
+            if (source.Length == 0)
+            {
+                throw new ArgumentException("A secret cannot be empty.", parameterName);
+            }
+
+            return (byte[])source.Clone();
         }
 
         private static byte[] Decode(string text, SecretEncoding encoding, string parameterName)
@@ -287,26 +209,40 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentNullException(parameterName);
             }
 
+            byte[] key;
+
             switch (encoding)
             {
                 case SecretEncoding.Utf8:
-                    return Encoding.UTF8.GetBytes(text);
+                    key = Encoding.UTF8.GetBytes(text);
+                    break;
 
                 case SecretEncoding.Base64:
-                    return DecodeOrThrow(text, SignatureEncoding.Base64, "base64");
+                    key = DecodeOrThrow(text, SignatureEncoding.Base64, "base64");
+                    break;
 
                 case SecretEncoding.Hex:
-                    return DecodeOrThrow(text, SignatureEncoding.Hex, "hexadecimal");
+                    key = DecodeOrThrow(text, SignatureEncoding.Hex, "hexadecimal");
+                    break;
 
                 case SecretEncoding.StandardWebhooks:
-                    string key = text.StartsWith(StandardWebhooksPrefix, StringComparison.Ordinal)
+                    string encoded = text.StartsWith(StandardWebhooksPrefix, StringComparison.Ordinal)
                         ? text.Substring(StandardWebhooksPrefix.Length)
                         : text;
-                    return DecodeOrThrow(key, SignatureEncoding.Base64, "a Standard Webhooks (whsec_) secret");
+                    key = DecodeOrThrow(encoded, SignatureEncoding.Base64, "a Standard Webhooks (whsec_) secret");
+                    break;
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(encoding), encoding, "Unknown secret encoding.");
             }
+
+            // Anyone can compute an HMAC under an empty key.
+            if (key.Length == 0)
+            {
+                throw new FormatException("A secret cannot be empty.");
+            }
+
+            return key;
         }
 
         private static byte[] DecodeOrThrow(string text, SignatureEncoding encoding, string description)

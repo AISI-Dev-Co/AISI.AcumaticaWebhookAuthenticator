@@ -5,14 +5,10 @@ using System.Security.Cryptography;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>
-    /// Computes HMAC digests for a <see cref="HmacAlgorithm"/>.
-    /// </summary>
+    /// <summary>Computes HMAC digests for a <see cref="HmacAlgorithm"/>.</summary>
     public static class HmacComputer
     {
-        /// <summary>
-        /// Computes the HMAC of <paramref name="message"/> under <paramref name="key"/>.
-        /// </summary>
+        /// <summary>Computes the HMAC of <paramref name="message"/> under <paramref name="key"/>.</summary>
         /// <param name="algorithm">Hash algorithm to use.</param>
         /// <param name="key">Secret key bytes.</param>
         /// <param name="message">Message bytes to sign.</param>

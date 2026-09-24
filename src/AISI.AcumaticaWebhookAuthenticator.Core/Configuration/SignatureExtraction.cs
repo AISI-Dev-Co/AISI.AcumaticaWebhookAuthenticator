@@ -5,23 +5,7 @@ using System.Collections.Generic;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>
-    /// How to get the signature out of a header value.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A header name plus an optional prefix covers GitHub (<c>sha256=…</c>) and Shopify (bare
-    /// base64), but not Stripe, whose header is a compound list:
-    /// <c>Stripe-Signature: t=1614556800,v1=5257a8…,v0=6ffbb5…</c>. Extracting a named element from
-    /// a delimited list is therefore a first-class mode rather than something a consumer is left to
-    /// pre-process.
-    /// </para>
-    /// <para>
-    /// Element extraction returns <em>every</em> match, not the first. Stripe emits one <c>v1</c>
-    /// per active endpoint secret, so during a rotation on their side the correct signature may not
-    /// be the first one in the header.
-    /// </para>
-    /// </remarks>
+    /// <summary>How to get the signature out of a header value: the whole value, or a named element such as Stripe's <c>v1=</c>.</summary>
     public sealed class SignatureExtraction
     {
         #region Construction and state
@@ -41,14 +25,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         /// <summary>The whole header value is the signature. The common case.</summary>
         public static SignatureExtraction Whole { get; } = new SignatureExtraction(null, ',', '=');
 
-        /// <summary>
-        /// The signature is the value of a named element in a delimited key/value list.
-        /// </summary>
+        /// <summary>The signature is the value of a named element in a delimited key/value list.</summary>
         /// <param name="elementKey">Element name, e.g. "v1" for Stripe.</param>
         /// <param name="pairSeparator">Separator between elements. Defaults to ','.</param>
         /// <param name="keyValueSeparator">Separator between an element's name and value. Defaults to '='.</param>
         /// <returns>The extraction mode.</returns>
-        /// <exception cref="ArgumentException"><paramref name="elementKey"/> is null or blank.</exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="elementKey"/> is null or blank, or the two separators are equal.
+        /// </exception>
         public static SignatureExtraction KeyValueElement(
             string elementKey,
             char pairSeparator = ',',
@@ -59,21 +43,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 throw new ArgumentException("An element key is required.", nameof(elementKey));
             }
 
+            if (pairSeparator == keyValueSeparator)
+            {
+                throw new ArgumentException(
+                    "The pair and key/value separators must differ; otherwise no element can ever match.",
+                    nameof(keyValueSeparator));
+            }
+
             return new SignatureExtraction(elementKey, pairSeparator, keyValueSeparator);
         }
         #endregion
 
         #region Extraction
-        /// <summary>
-        /// Pulls candidate signature values out of every value of a repeated header.
-        /// </summary>
+        /// <summary>Pulls candidate signatures out of every value of a repeated header, each value independently.</summary>
         /// <param name="headerValues">The raw header values, in the order they arrived.</param>
         /// <returns>Zero or more candidate signatures.</returns>
-        /// <remarks>
-        /// The platform exposes headers as <c>StringValues</c>, so a repeated signature header
-        /// arrives as distinct values rather than one folded string. Each is extracted from
-        /// independently.
-        /// </remarks>
         public IReadOnlyList<string> Extract(IReadOnlyList<string>? headerValues)
         {
             if (headerValues is null || headerValues.Count == 0)
@@ -95,9 +79,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return all;
         }
 
-        /// <summary>
-        /// Pulls candidate signature values out of a single header value.
-        /// </summary>
+        /// <summary>Pulls every candidate signature out of a single header value; Stripe sends one <c>v1</c> per active secret.</summary>
         /// <param name="headerValue">The raw header value.</param>
         /// <returns>Zero or more candidate signatures, in the order they appeared.</returns>
         public IReadOnlyList<string> Extract(string? headerValue)
@@ -109,11 +91,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
             if (_elementKey is null)
             {
-                // Split even in whole-value mode. Repeated headers normally reach the context as
-                // distinct values, but a caller using the single-valued constructor delivers them
-                // already comma-joined, and an intermediary may fold them regardless. Neither the
-                // hex nor the base64 alphabet contains a comma, so splitting cannot corrupt a
-                // single well-formed signature.
+                // Split even whole values, as intermediaries may fold repeats; hex and base64 contain no comma.
                 var whole = new List<string>();
 
                 foreach (string part in headerValue!.Split(','))

@@ -65,5 +65,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
             Assert.Same(body, resolution.Bytes);
         }
+
+        [Fact]
+        public void AnAbsentHeaderYieldsEmptyRatherThanNull()
+        {
+            WebhookAuthContext request = RequestBuilder.Post().WithBody("x").Build();
+
+            Assert.False(request.TryGetHeader("X-Absent", out string value));
+            Assert.Equal(string.Empty, value);
+        }
     }
 }
