@@ -2,9 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// A strategy for authenticating an inbound webhook request.
-    /// </summary>
+    /// <summary>A strategy for authenticating an inbound webhook request.</summary>
     public interface IWebhookAuthenticator
     {
         /// <summary>Short scheme id, e.g. HMAC, JWT, BASIC.</summary>
