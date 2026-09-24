@@ -8,12 +8,6 @@ using PX.Api.Webhooks;
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>Platform context plus the request body. Use <see cref="Body"/>, not the spent request stream.</summary>
-    /// <remarks>
-    /// Deserialise from <see cref="Body"/> and nothing else — <c>Request.Body</c> is a spent
-    /// stream. The buffer is shared, not copied; do not mutate it. Those bytes are the request
-    /// body; whether a signature covered them depends on the scheme (HMAC/HMACTS templates do;
-    /// SECRET, BASIC, NONE, and JWT do not unless JWT carried a verified body-hash claim).
-    /// </remarks>
     public sealed class AuthenticatedWebhookContext
     {
         private readonly WebhookContext _platform;
@@ -37,9 +31,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         public string TraceIdentifier => _platform.TraceIdentifier;
 
         /// <summary>
-        /// The raw request body. Treat as read-only. Signature coverage depends on the scheme:
-        /// HMAC/HMACTS MAC these bytes via the template; SECRET, BASIC, NONE, and JWT do not
-        /// unless JWT carried a verified body-hash claim.
+        /// The raw request body, shared rather than copied: treat as read-only. HMAC schemes and
+        /// JWT with a <c>bh</c> claim verified these bytes; SECRET, BASIC and NONE did not.
         /// </summary>
         public byte[] Body { get; }
 

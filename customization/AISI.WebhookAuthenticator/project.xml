@@ -4,63 +4,63 @@
   <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.html" ScreenId="AS301000" FileID="3009409d-b2e9-48ef-9445-5fc3c895a295" />
   <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.ts" ScreenId="AS301000" FileID="4d889521-5f56-4355-9c13-2570d3f1cf60" />
   <ScreenWithRights AccessRightsMergeRule="GrantAll">
-  	<data-set>
-  		<relations format-version="4" relations-version="20250701" main-table="SiteMap">
-  			<link from="RolesInCache (ScreenID)" to="SiteMap (ScreenID)" />
-  			<link from="RolesInGraph (ScreenID)" to="SiteMap (ScreenID)" />
-  			<link from="RolesInMember (ScreenID)" to="SiteMap (ScreenID)" />
-  		</relations>
-  		<layout>
-  			<table name="SiteMap">
-  				<table name="RolesInCache" uplink="(ScreenID) = (ScreenID)" />
-  				<table name="RolesInGraph" uplink="(ScreenID) = (ScreenID)" />
-  				<table name="RolesInMember" uplink="(ScreenID) = (ScreenID)" />
-  			</table>
-  		</layout>
-  		<data>
-  			<SiteMap>
-  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D">
-  					<RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
-  					<RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
-  				</row>
-  			</SiteMap>
-  		</data>
-  	</data-set>
+    <data-set>
+      <relations format-version="4" relations-version="20250701" main-table="SiteMap">
+        <link from="RolesInCache (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="RolesInGraph (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="RolesInMember (ScreenID)" to="SiteMap (ScreenID)" />
+      </relations>
+      <layout>
+        <table name="SiteMap">
+          <table name="RolesInCache" uplink="(ScreenID) = (ScreenID)" />
+          <table name="RolesInGraph" uplink="(ScreenID) = (ScreenID)" />
+          <table name="RolesInMember" uplink="(ScreenID) = (ScreenID)" />
+        </table>
+      </layout>
+      <data>
+        <SiteMap>
+          <row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D">
+            <RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
+            <RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
+          </row>
+        </SiteMap>
+      </data>
+    </data-set>
   </ScreenWithRights>
   <SiteMapNode>
-  	<data-set>
-  		<relations format-version="4" relations-version="20250701" main-table="SiteMap">
-  			<link from="MUIScreen (NodeID)" to="SiteMap (NodeID)" />
-  			<link from="MUIWorkspace (WorkspaceID)" to="MUIScreen (WorkspaceID)" type="FromMaster" linkname="workspaceToScreen" split-location="yes" updateable="True" />
-  			<link from="MUISubcategory (SubcategoryID)" to="MUIScreen (SubcategoryID)" type="FromMaster" updateable="True" />
-  			<link from="MUITile (ScreenID)" to="SiteMap (ScreenID)" />
-  			<link from="MUIWorkspace (WorkspaceID)" to="MUITile (WorkspaceID)" type="FromMaster" linkname="workspaceToTile" split-location="yes" updateable="True" />
-  			<link from="MUIArea (AreaID)" to="MUIWorkspace (AreaID)" type="FromMaster" updateable="True" />
-  			<link from="MUIPinnedScreen (NodeID, WorkspaceID)" to="MUIScreen (NodeID, WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
-  			<link from="MUIFavoriteWorkspace (WorkspaceID)" to="MUIWorkspace (WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
-  		</relations>
-  		<layout>
-  			<table name="SiteMap">
-  				<table name="MUIScreen" uplink="(NodeID) = (NodeID)">
-  					<table name="MUIPinnedScreen" uplink="(NodeID, WorkspaceID) = (NodeID, WorkspaceID)" />
-  				</table>
-  				<table name="MUITile" uplink="(ScreenID) = (ScreenID)" />
-  			</table>
-  			<table name="MUIWorkspace">
-  				<table name="MUIFavoriteWorkspace" uplink="(WorkspaceID) = (WorkspaceID)" />
-  			</table>
-  			<table name="MUISubcategory" />
-  			<table name="MUIArea" />
-  		</layout>
-  		<data>
-  			<SiteMap>
-  				<row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D" />
-  			</SiteMap>
-  		</data>
-  	</data-set>
+    <data-set>
+      <relations format-version="4" relations-version="20250701" main-table="SiteMap">
+        <link from="MUIScreen (NodeID)" to="SiteMap (NodeID)" />
+        <link from="MUIWorkspace (WorkspaceID)" to="MUIScreen (WorkspaceID)" type="FromMaster" linkname="workspaceToScreen" split-location="yes" updateable="True" />
+        <link from="MUISubcategory (SubcategoryID)" to="MUIScreen (SubcategoryID)" type="FromMaster" updateable="True" />
+        <link from="MUITile (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="MUIWorkspace (WorkspaceID)" to="MUITile (WorkspaceID)" type="FromMaster" linkname="workspaceToTile" split-location="yes" updateable="True" />
+        <link from="MUIArea (AreaID)" to="MUIWorkspace (AreaID)" type="FromMaster" updateable="True" />
+        <link from="MUIPinnedScreen (NodeID, WorkspaceID)" to="MUIScreen (NodeID, WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+        <link from="MUIFavoriteWorkspace (WorkspaceID)" to="MUIWorkspace (WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+      </relations>
+      <layout>
+        <table name="SiteMap">
+          <table name="MUIScreen" uplink="(NodeID) = (NodeID)">
+            <table name="MUIPinnedScreen" uplink="(NodeID, WorkspaceID) = (NodeID, WorkspaceID)" />
+          </table>
+          <table name="MUITile" uplink="(ScreenID) = (ScreenID)" />
+        </table>
+        <table name="MUIWorkspace">
+          <table name="MUIFavoriteWorkspace" uplink="(WorkspaceID) = (WorkspaceID)" />
+        </table>
+        <table name="MUISubcategory" />
+        <table name="MUIArea" />
+      </layout>
+      <data>
+        <SiteMap>
+          <row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D" />
+        </SiteMap>
+      </data>
+    </data-set>
   </SiteMapNode>
   <Sql TableName="AISIWebhookSecret" TableSchemaXml="#CDATA">
-  	<CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookSecret">
+    <CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookSecret">
     <col name="CompanyID" type="Int" default="Zero" />
     <col name="WebHookID" type="UniqueIdentifier" />
     <col name="Secret" type="NVarChar(2048)" nullable="true" />

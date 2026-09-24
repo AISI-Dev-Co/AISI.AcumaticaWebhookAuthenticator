@@ -19,9 +19,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>How long Rotate Secret keeps the retired secret accepted, in days.</summary>
         public const int RotationOverlapDays = 7;
 
-        // The framework populates action and view members by reflection during graph
-        // construction; the null-forgiving initialisers acknowledge that, they do not perform it.
-
         #region Views and actions
         /// <summary>All webhook secrets.</summary>
         public SelectFrom<AISIWebhookSecret>.View Secrets = null!;
@@ -83,13 +80,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// </summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.secret> e)
         {
-            RejectOverlongSecret(e.Row, e.NewValue, "Secret");
+            RejectOverlongSecret<AISIWebhookSecret.secret>(e.Cache, e.Row, e.NewValue);
         }
 
         /// <summary>Same limit for the rotating secret.</summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.rotatingSecret> e)
         {
-            RejectOverlongSecret(e.Row, e.NewValue, "Rotating Secret");
+            RejectOverlongSecret<AISIWebhookSecret.rotatingSecret>(e.Cache, e.Row, e.NewValue);
         }
 
         /// <summary>
@@ -163,7 +160,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
         #endregion
 
-        #region Internals
+        #region Secret generation
         private AISIWebhookSecret RequireCurrent()
         {
             AISIWebhookSecret? row = Secrets.Current;
@@ -216,7 +213,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             Reveal.Cache.Clear();
             return adapter.Get();
         }
+        #endregion
 
+        #region Validation
         private void EnsureDecodable(AISIWebhookSecret row)
         {
             SecretEncoding encoding = SecretEncodingListAttribute.ToEncoding(row.SecretEncoding);
@@ -225,11 +224,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 && !Equals(Secrets.Cache.GetValueOriginal<AISIWebhookSecret.secretEncoding>(row), row.SecretEncoding);
             AISIWebhookSecret? stored = reencoded ? ErpSecretProvider.SelectDecrypted(row.WebHookID!.Value) : null;
 
-            EnsureDecodable<AISIWebhookSecret.secret>(row, encoding, stored?.Secret, "Secret");
-            EnsureDecodable<AISIWebhookSecret.rotatingSecret>(row, encoding, stored?.RotatingSecret, "Rotating Secret");
+            EnsureDecodable<AISIWebhookSecret.secret>(row, encoding, stored?.Secret);
+            EnsureDecodable<AISIWebhookSecret.rotatingSecret>(row, encoding, stored?.RotatingSecret);
         }
 
-        private void EnsureDecodable<TField>(AISIWebhookSecret row, SecretEncoding encoding, string? stored, string fieldLabel)
+        private void EnsureDecodable<TField>(AISIWebhookSecret row, SecretEncoding encoding, string? stored)
             where TField : IBqlField
         {
             object? value = Secrets.Cache.GetValue<TField>(row);
@@ -248,6 +247,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
             catch (FormatException failure)
             {
+                string fieldLabel = PXUIFieldAttribute.GetDisplayName<TField>(Secrets.Cache);
                 Secrets.Cache.RaiseExceptionHandling<TField>(
                     row,
                     null,
@@ -257,14 +257,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
         }
 
-        private static void RejectOverlongSecret(AISIWebhookSecret? row, object? newValue, string fieldLabel)
+        private static void RejectOverlongSecret<TField>(PXCache cache, AISIWebhookSecret? row, object? newValue)
+            where TField : IBqlField
         {
             if (newValue is string text && text.Length > AISIWebhookSecret.SecretLength)
             {
                 throw new PXSetPropertyException(
                     row,
                     Messages.SecretTooLong,
-                    fieldLabel,
+                    PXUIFieldAttribute.GetDisplayName<TField>(cache),
                     AISIWebhookSecret.SecretLength,
                     text.Length);
             }

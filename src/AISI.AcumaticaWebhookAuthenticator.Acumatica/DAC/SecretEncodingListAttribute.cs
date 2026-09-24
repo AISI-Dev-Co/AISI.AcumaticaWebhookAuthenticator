@@ -29,7 +29,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         {
         }
 
-        /// <summary>Maps a stored code to its encoding; blank is UTF-8, the pre-column behaviour.</summary>
+        /// <summary>Maps a stored code to its encoding; blank is UTF-8.</summary>
         /// <exception cref="FormatException"><paramref name="code"/> is not a known code.</exception>
         public static SecretEncoding ToEncoding(string? code)
         {

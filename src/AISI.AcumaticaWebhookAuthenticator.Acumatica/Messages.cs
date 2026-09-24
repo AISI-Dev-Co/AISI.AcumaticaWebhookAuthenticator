@@ -4,7 +4,7 @@ using PX.Common;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>Localizable screen messages.</summary>
+    /// <summary>Localisable screen messages.</summary>
     [PXLocalizable]
     public static class Messages
     {

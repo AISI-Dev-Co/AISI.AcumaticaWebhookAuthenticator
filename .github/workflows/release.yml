@@ -1,112 +1,57 @@
 name: Release
 
-# Builds the two release artifacts:
-#   1. AISI.AcumaticaWebhookAuthenticator.Core.<version>.nupkg - the NuGet package
-#   2. AISI.WebhookAuthenticator.zip - the importable Acumatica customization package,
-#      assembled from customization/AISI.WebhookAuthenticator (project.xml + payload)
-#
-# The Acumatica adapter DLL is not in git: it references licensed PX.* assemblies from a site
-# Bin, which cannot exist on a runner, so CI cannot compile it. A committed blob is almost never
-# this branch's output. Core is built fresh here. The customization zip is attached only when a
-# freshly built adapter DLL is present on the runner (local pack / a machine with site Bin).
-
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Read version
-        id: version
+      - name: Check tag matches Directory.Build.props
         run: |
           set -euo pipefail
           VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$VERSION" ]]; then
             echo "::error::Tag ${GITHUB_REF#refs/tags/} does not match Directory.Build.props version $VERSION"
             exit 1
           fi
 
-      - name: Build and test Core
-        run: |
-          dotnet restore tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests
-          dotnet build tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-restore --configuration Release
-          dotnet test tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests --no-build --configuration Release
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
 
-      - name: Pack NuGet package
-        run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts
-
-      # Adapter DLL is gitignored and not on the runner. Do not ship a zip that lists it in
-      # project.xml without the matching binary from this branch. Nupkg still ships.
-      - name: Assemble customization package
-        id: zip
-        run: |
-          set -euo pipefail
-          ADAPTER='customization/AISI.WebhookAuthenticator/Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll'
-          if [[ ! -f "$ADAPTER" ]]; then
-            echo "::warning::$ADAPTER is not in the tree. Build it vs a 2025 R2+ site Bin before tagging a customization zip. Publishing Core nupkg only — will not attach a zip with a missing or stale adapter."
-            echo "has_zip=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          STAGE=$(mktemp -d)
-          cp customization/AISI.WebhookAuthenticator/project.xml "$STAGE/"
-          mkdir -p "$STAGE/Bin" "$STAGE/screens/AS/AS301000"
-          cp src/AISI.AcumaticaWebhookAuthenticator.Core/bin/Release/netstandard2.0/AISI.AcumaticaWebhookAuthenticator.Core.dll "$STAGE/Bin/"
-          cp "$ADAPTER" "$STAGE/Bin/"
-          cp screens/AS/AS301000/AS301000.ts screens/AS/AS301000/AS301000.html "$STAGE/screens/AS/AS301000/"
-          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/artifacts/AISI.WebhookAuthenticator.zip" .)
-          unzip -l artifacts/AISI.WebhookAuthenticator.zip
-          echo "has_zip=true" >> "$GITHUB_OUTPUT"
-
-      # Acumatica assemblies are licensed and must never be redistributed; assert against every
-      # artifact, the customization zip included.
-      - name: Assert no Acumatica assemblies in any artifact
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for pkg in ./artifacts/*.nupkg ./artifacts/*.zip; do
-            echo "Inspecting $pkg"
-            if unzip -l "$pkg" | grep -Ei 'PX\..*\.dll'; then
-              echo "::error::$pkg contains an Acumatica assembly"
-              exit 1
-            fi
-          done
-          shopt -u nullglob
-          echo "No Acumatica assemblies found."
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+  release:
+    needs: ci
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-dotnet@v4
         with:
-          name: release-assets
-          path: |
-            artifacts/*.nupkg
-            artifacts/AISI.WebhookAuthenticator.zip
-          if-no-files-found: warn
+          dotnet-version: '8.0.x'
 
-      # nuget.org is the install path VARs actually use. The key lives in the repo's
-      # NUGET_API_KEY Actions secret — never in the tree. Missing secret skips the push
-      # rather than failing the GitHub Release; the nupkg is still attached below.
+      - uses: actions/download-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts
+
+      # A missing secret skips nuget.org rather than failing the GitHub release.
       - name: Publish to nuget.org
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "::warning::NUGET_API_KEY secret is not set; skipping nuget.org. Add it under Settings → Secrets and variables → Actions, then re-run this tag workflow."
+            echo "::warning::NUGET_API_KEY secret is not set; skipping nuget.org."
             exit 0
           fi
           dotnet nuget push ./artifacts/*.nupkg \
@@ -115,17 +60,10 @@ jobs:
             --skip-duplicate
 
       - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ASSETS=(artifacts/*.nupkg)
-          if [[ -f artifacts/AISI.WebhookAuthenticator.zip ]]; then
-            ASSETS+=(artifacts/AISI.WebhookAuthenticator.zip)
-          else
-            echo "::warning::No customization zip — adapter DLL was not on the runner."
-          fi
-          gh release create "${GITHUB_REF#refs/tags/}" \
-            "${ASSETS[@]}" \
+          gh release create "${GITHUB_REF#refs/tags/}" artifacts/*.nupkg \
+            --repo "$GITHUB_REPOSITORY" \
             --title "${GITHUB_REF#refs/tags/}" \
             --generate-notes
