@@ -35,7 +35,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [InlineData("198.51.100.64", false)]  // first past it
         public void NonOctetPrefix_MasksMidByte(string candidate, bool expected)
         {
-            // /26 splits inside a byte, so this fails if masking only handles whole octets.
             IpAllowlist allowlist = IpAllowlist.Parse("198.51.100.0/26");
 
             Assert.Equal(expected, allowlist.Contains(IPAddress.Parse(candidate)));
@@ -44,7 +43,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void HostBitsInAnEntry_AreMaskedToTheConventionalReading()
         {
-            // 203.0.113.7/24 means 203.0.113.0/24, as every router config reads it.
             IpAllowlist allowlist = IpAllowlist.Parse("203.0.113.7/24");
 
             Assert.True(allowlist.Contains(IPAddress.Parse("203.0.113.200")));
@@ -71,28 +69,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal(expected, allowlist.Contains(IPAddress.Parse(candidate)));
         }
 
-        [Fact]
-        public void Ipv4MappedIpv6Candidate_MatchesAnIpv4Entry()
+        [Theory]
+        [InlineData("203.0.113.0/24", "::ffff:203.0.113.9")]
+        [InlineData("::ffff:203.0.113.9", "203.0.113.9")]
+        public void Ipv4MappedIpv6_MatchesTheCorrespondingIpv4(string entry, string candidate)
         {
-            // A dual-stack proxy reports an IPv4 caller as ::ffff:a.b.c.d; the allowlist must not
-            // treat that as a different caller.
-            IpAllowlist allowlist = IpAllowlist.Parse("203.0.113.0/24");
-
-            Assert.True(allowlist.Contains(IPAddress.Parse("::ffff:203.0.113.9")));
-        }
-
-        [Fact]
-        public void Ipv4MappedIpv6Entry_MatchesAnIpv4Candidate()
-        {
-            IpAllowlist allowlist = IpAllowlist.Parse("::ffff:203.0.113.9");
-
-            Assert.True(allowlist.Contains(IPAddress.Parse("203.0.113.9")));
+            // Dual-stack proxies report IPv4 callers as ::ffff:a.b.c.d.
+            Assert.True(IpAllowlist.Parse(entry).Contains(IPAddress.Parse(candidate)));
         }
 
         [Fact]
         public void FamiliesDoNotCrossMatch()
         {
-            // 203.0.113.7 and a v6 address sharing leading bytes must not collide.
+            // 0.0.0.0/0 covers every IPv4 address and no IPv6 one.
             IpAllowlist allowlist = IpAllowlist.Parse("0.0.0.0/0");
 
             Assert.True(allowlist.Contains(IPAddress.Parse("203.0.113.7")));
@@ -129,6 +118,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Throws<FormatException>(() => IpAllowlist.Parse(entry));
         }
 
+        [Theory]
+        [InlineData("10")]
+        [InlineData("10/8")]
+        [InlineData("10.1")]
+        [InlineData("10.0.1")]
+        [InlineData("167772161")]
+        [InlineData("010.0.0.1")]
+        [InlineData("0x0A.0.0.1")]
+        [InlineData("10.0.0.256")]
+        [InlineData("10.0.0.1.5")]
+        [InlineData("10..0.1")]
+        [InlineData("+10.0.0.1")]
+        public void Ipv4MustBeFourDottedDecimalOctets(string entry)
+        {
+            // IPAddress.TryParse would read "10/8" as 0.0.0.10/8, i.e. 0.0.0.0/8.
+            Assert.Throws<FormatException>(() => IpAllowlist.Parse(entry));
+        }
+
         [Fact]
         public void EmptyList_ThrowsRatherThanSilentlyDenyingEverything()
         {
@@ -139,17 +146,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [InlineData("203.0.113.9")]
         [InlineData("203.0.113.0/24, 2001:db8::/32")]
         [InlineData(" 203.0.113.0/24 ,, 2001:db8::/32 ")]
+        [InlineData("203.0.113.0/24,  ,2001:db8::/32")]
         public void ParseCsv_AcceptsWhatTheScreenStores(string csv)
         {
-            // The one tokenization both the maintenance screen and the request path use.
             Assert.True(IpAllowlist.ParseCsv(csv).Contains(IPAddress.Parse("203.0.113.9")));
         }
 
-        [Fact]
-        public void ParseCsv_WithOnlySeparators_ThrowsLikeAnEmptyList()
+        [Theory]
+        [InlineData("")]
+        [InlineData(",")]
+        [InlineData("  ,  ")]
+        public void ParseCsv_WithNoEntries_ThrowsLikeAnEmptyList(string csv)
         {
-            Assert.Throws<ArgumentException>(() => IpAllowlist.ParseCsv(","));
+            Assert.Throws<ArgumentException>(() => IpAllowlist.ParseCsv(csv));
         }
-
     }
 }

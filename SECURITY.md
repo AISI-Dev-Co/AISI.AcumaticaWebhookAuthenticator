@@ -6,7 +6,7 @@ Report vulnerabilities **privately**. Do not open a public issue for a suspected
 
 Open **Security → Advisories → New draft security advisory** on this repository.
 
-Include the Acumatica version, the scheme (`HMAC` / `HMACTS` / `SECRET` / `BASIC` / `JWT` / `NONE`), and whether a sender can distinguish failure modes.
+Include the Acumatica version, the scheme (`HMAC` / `HMACTS` / `SECRET` / `BASIC` / `JWT` / `NONE`), whether an IP allowlist was configured, and whether a sender can distinguish failure modes.
 
 ## Please do not
 
@@ -15,4 +15,4 @@ Include the Acumatica version, the scheme (`HMAC` / `HMACTS` / `SECRET` / `BASIC
 
 ## Supported versions
 
-The latest Release on the `main` branch, targeting Acumatica 2025 R2 – 2026 R1.
+The latest release, targeting Acumatica 2025 R2 – 2026 R1.

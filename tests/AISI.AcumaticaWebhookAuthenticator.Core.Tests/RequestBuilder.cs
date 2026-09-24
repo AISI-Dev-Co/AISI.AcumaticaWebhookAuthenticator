@@ -7,9 +7,7 @@ using AISI.AcumaticaWebhookAuthenticator.Authentication;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Tests
 {
-    /// <summary>
-    /// Builds <see cref="WebhookAuthContext"/> instances for tests.
-    /// </summary>
+    /// <summary>Builds <see cref="WebhookAuthContext"/> instances for tests.</summary>
     internal sealed class RequestBuilder
     {
         internal static readonly Guid DefaultWebhookId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
@@ -41,9 +39,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             return this;
         }
 
-        /// <summary>
-        /// Adds a header that arrived more than once, as the platform's StringValues would carry it.
-        /// </summary>
+        /// <summary>Adds a header that arrived more than once, as the platform's StringValues would carry it.</summary>
         public RequestBuilder WithRepeatedHeader(string name, params string[] values)
         {
             _headers[name] = values;
@@ -62,12 +58,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             return this;
         }
 
-        public RequestBuilder WithMethod(string method)
-        {
-            _method = method;
-            return this;
-        }
-
         public RequestBuilder WithPath(string path)
         {
             _path = path;
@@ -83,12 +73,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public RequestBuilder ReceivedAtUnixSeconds(long seconds)
         {
             _receivedOn = DateTimeOffset.FromUnixTimeSeconds(seconds);
-            return this;
-        }
-
-        public RequestBuilder ForWebhook(Guid webhookId)
-        {
-            _webhookId = webhookId;
             return this;
         }
 

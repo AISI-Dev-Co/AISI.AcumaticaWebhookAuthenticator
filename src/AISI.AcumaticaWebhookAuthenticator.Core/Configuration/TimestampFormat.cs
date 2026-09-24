@@ -2,9 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>
-    /// Wire format of a signed timestamp.
-    /// </summary>
+    /// <summary>Wire format of a signed timestamp.</summary>
     public enum TimestampFormat
     {
         /// <summary>Seconds since the Unix epoch. Stripe and most others.</summary>

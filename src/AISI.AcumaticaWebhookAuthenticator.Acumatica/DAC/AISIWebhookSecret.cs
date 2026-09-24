@@ -6,9 +6,7 @@ using PX.Data.BQL;
 using PX.Data.ReferentialIntegrity.Attributes;
 using WebHook = PX.Api.Webhooks.DAC.WebHook;
 
-// The DAC pattern requires a public BQL field class per property and the standard audit-field
-// block; the property summaries carry the meaning and the boilerplate has none to add. Suppressed
-// for this file only.
+// BQL field classes and audit fields are DAC boilerplate; the property summaries carry the meaning.
 #pragma warning disable CS1591
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
@@ -18,9 +16,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
     [PXCacheName("Webhook Secret")]
     public class AISIWebhookSecret : PXBqlTable, IBqlTable
     {
-        /// <summary>
-        /// The plaintext limit the maintenance graph enforces on entry.
-        /// </summary>
+        /// <summary>The plaintext limit the maintenance graph enforces on entry.</summary>
         public const int SecretLength = 255;
 
         /// <summary>Crypt column size. Ciphertext is ~2.7× plaintext plus RSA padding; 255 is not enough.</summary>
@@ -62,6 +58,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         [PXUIField(DisplayName = "Secret")]
         public virtual string? Secret { get; set; }
         public abstract class secret : BqlString.Field<secret> { }
+        #endregion
+
+        #region SecretEncoding
+        /// <summary>How <see cref="Secret"/> and <see cref="RotatingSecret"/> map to key bytes.</summary>
+        [PXDBString(1, IsFixed = true, IsUnicode = false)]
+        [PXDefault(SecretEncodingListAttribute.Utf8, PersistingCheck = PXPersistingCheck.Nothing)]
+        [SecretEncodingList]
+        [PXUIField(DisplayName = "Secret Encoding")]
+        public virtual string? SecretEncoding { get; set; }
+        public abstract class secretEncoding : BqlString.Field<secretEncoding> { }
         #endregion
 
         #region RotatingSecret

@@ -8,23 +8,16 @@ using AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
 using PX.Data;
+using PX.Data.BQL;
+using PX.Data.BQL.Fluent;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
     /// <summary>
-    /// Reads a webhook's authentication configuration — secret, rotation pair, IP allowlist —
-    /// from its <see cref="AISIWebhookSecret"/> row, maintained on screen AS301000.
+    /// Reads a webhook's secret, rotation pair and IP allowlist from its <see cref="AISIWebhookSecret"/>
+    /// row (screen AS301000), cached for <see cref="CacheDuration"/>. Thread-safe.
     /// </summary>
-    /// <remarks>
-    /// Rows are read through a <see cref="PXCache"/> with the crypt fields set decrypted. Reads
-    /// (misses included) are cached for <see cref="CacheDuration"/> in a store shared across
-    /// instances and keyed by <em>tenant and webhook</em> — tenants copied from one another carry
-    /// identical <c>WebHookID</c>s, and a tenant-blind key would serve one tenant's secret to
-    /// another. Entries are <see cref="Lazy{T}"/> so an expiry under load refreshes with one
-    /// database read; a load that throws is evicted immediately, because a memoized exception
-    /// would otherwise replay a transient database failure until the application restarted.
-    /// Thread-safe.
-    /// </remarks>
+    /// <remarks>The cache is keyed by tenant as well as webhook: tenants copied from one another share <c>WebHookID</c>s.</remarks>
     public sealed class ErpSecretProvider : IWebhookSecretProvider, IAuthenticatorRefiner
     {
         #region Construction and state
@@ -36,9 +29,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         private readonly Guid _webhookId;
 
-        /// <summary>
-        /// Creates a provider for one webhook registration.
-        /// </summary>
+        /// <summary>Creates a provider for one webhook registration.</summary>
         /// <param name="webhookId">The registration's <c>WebHook.WebHookID</c>.</param>
         public ErpSecretProvider(Guid webhookId)
         {
@@ -50,11 +41,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <inheritdoc/>
         public WebhookSecret? GetSecret() => Current().Secret;
 
-        /// <summary>
-        /// Applies the row's IP allowlist, when one is configured, around <paramref name="inner"/>;
-        /// substitutes a deny-everything authenticator when the stored configuration cannot be
-        /// applied.
-        /// </summary>
+        /// <summary>Wraps <paramref name="inner"/> in the row's IP allowlist, or denies everything if the stored one is unusable.</summary>
         /// <param name="inner">The authenticator for this webhook.</param>
         /// <exception cref="ArgumentNullException"><paramref name="inner"/> is null.</exception>
         public IWebhookAuthenticator Refine(IWebhookAuthenticator inner)
@@ -68,8 +55,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (entry.AllowlistBroken)
             {
-                // The administrator asked for an IP restriction; the one thing this must not do
-                // is quietly not restrict.
+                // An IP restriction was asked for; never quietly fall back to none.
                 return new DenyAllAuthenticator(inner);
             }
 
@@ -99,9 +85,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 return entry;
             }
 
-            // Whichever thread wins the swap loads once; losers read the winner's value. The
-            // replacement is returned even if a slow load leaves it nominally stale already -
-            // it is the freshest value there is, and re-looping on it would spin.
+            // The swap's winner loads once and losers share its value, returned even if stale rather than spinning.
             Lazy<CacheEntry> replacement = CreateEntry(key);
             if (!Cache.TryUpdate(key, replacement, lazy))
             {
@@ -119,9 +103,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
             catch
             {
-                // ExecutionAndPublication memoizes the exception; left in place it would replay
-                // one transient database failure on every request until the app restarted. Evict
-                // (only if this exact lazy is still the entry) so the next request retries.
+                // Evict this exact entry so a transient database failure is retried, not memoised until restart.
                 ((ICollection<KeyValuePair<(string, Guid), Lazy<CacheEntry>>>)Cache)
                     .Remove(new KeyValuePair<(string, Guid), Lazy<CacheEntry>>(key, lazy));
                 throw;
@@ -131,7 +113,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         private Lazy<CacheEntry> CreateEntry((string Company, Guid WebhookId) key) =>
             new Lazy<CacheEntry>(Load, LazyThreadSafetyMode.ExecutionAndPublication);
 
-        private CacheEntry Load()
+        /// <summary>Reads a webhook's row with the crypt fields decrypted. Never display the result.</summary>
+        internal static AISIWebhookSecret? SelectDecrypted(Guid webhookId)
         {
             var graph = PXGraph.CreateInstance<PXGraph>();
             PXCache cache = graph.Caches[typeof(AISIWebhookSecret)];
@@ -139,13 +122,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             PXDBCryptStringAttribute.SetDecrypted<AISIWebhookSecret.secret>(cache, true);
             PXDBCryptStringAttribute.SetDecrypted<AISIWebhookSecret.rotatingSecret>(cache, true);
 
-            AISIWebhookSecret? row = PXSelectReadonly<
-                    AISIWebhookSecret,
-                    Where<AISIWebhookSecret.webHookID, Equal<Required<AISIWebhookSecret.webHookID>>>>
-                .Select(graph, _webhookId);
+            return SelectFrom<AISIWebhookSecret>
+                .Where<AISIWebhookSecret.webHookID.IsEqual<@P.AsGuid>>
+                .View.ReadOnly.Select(graph, webhookId);
+        }
 
-            // Stamped after the query, not before it: a slow query stamped early would produce an
-            // entry already near expiry, and a refresh that immediately re-refreshes.
+        private CacheEntry Load()
+        {
+            AISIWebhookSecret? row = SelectDecrypted(_webhookId);
+
+            // Stamped after the query so a slow read does not produce an entry already near expiry.
             DateTime fetchedOn = DateTime.UtcNow;
 
             if (row is null)
@@ -157,13 +143,26 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!string.IsNullOrEmpty(row.Secret))
             {
-                secret = WebhookSecret.FromUtf8(row.Secret!);
-
-                if (!string.IsNullOrEmpty(row.RotatingSecret) && row.RotatingExpiresOn is object)
+                try
                 {
-                    secret = secret.WithRotatingUtf8(
-                        row.RotatingSecret!,
-                        new DateTimeOffset(DateTime.SpecifyKind(row.RotatingExpiresOn.Value, DateTimeKind.Utc)));
+                    SecretEncoding encoding = SecretEncodingListAttribute.ToEncoding(row.SecretEncoding);
+                    secret = WebhookSecret.Parse(row.Secret!, encoding);
+
+                    if (!string.IsNullOrEmpty(row.RotatingSecret) && row.RotatingExpiresOn is object)
+                    {
+                        secret = secret.WithRotating(
+                            row.RotatingSecret!,
+                            encoding,
+                            new DateTimeOffset(DateTime.SpecifyKind(row.RotatingExpiresOn.Value, DateTimeKind.Utc)));
+                    }
+                }
+                catch (FormatException failure)
+                {
+                    secret = null;
+                    PXTrace.WriteError(
+                        "Webhook {0}: the stored secret could not be decoded and all requests will be denied until it is fixed on the webhook secrets screen. {1}",
+                        _webhookId,
+                        failure.Message);
                 }
             }
 
@@ -178,8 +177,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!string.IsNullOrWhiteSpace(row.AllowedAddresses))
             {
-                // The database can be edited past the screen's validation; unparseable fails
-                // closed, not open.
+                // The database can be edited past the screen's validation; unparseable fails closed.
                 try
                 {
                     allowlist = IpAllowlist.ParseCsv(row.AllowedAddresses!);
@@ -198,7 +196,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
         #endregion
 
-        #region Internals
+        #region Nested types
         private sealed class CacheEntry
         {
             public CacheEntry(
@@ -230,11 +228,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public DateTime FetchedOn { get; }
         }
 
-        /// <summary>
-        /// Denies every request; substituted when a stored allowlist cannot be applied. Carries
-        /// the wrapped scheme's challenge so the deny-all state is indistinguishable from any
-        /// other 401.
-        /// </summary>
+        /// <summary>Denies every request, with the wrapped scheme's challenge so it looks like any other 401.</summary>
         private sealed class DenyAllAuthenticator : IWebhookAuthenticator, IChallengeSource
         {
             private readonly IWebhookAuthenticator _inner;

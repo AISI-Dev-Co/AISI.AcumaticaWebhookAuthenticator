@@ -10,9 +10,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     public static class SignatureCodec
     {
         #region Encoding and decoding
-        /// <summary>
-        /// Renders a digest in the given wire encoding.
-        /// </summary>
+        /// <summary>Renders a digest in the given wire encoding.</summary>
         /// <param name="digest">Raw digest bytes.</param>
         /// <param name="encoding">Target wire encoding.</param>
         /// <returns>The encoded signature.</returns>
@@ -43,17 +41,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                     throw new ArgumentOutOfRangeException(nameof(encoding), encoding, "Unknown signature encoding.");
             }
         }
-        /// <summary>
-        /// Attempts to decode a signature from its wire encoding.
-        /// </summary>
+
+        /// <summary>Attempts to decode a signature from its wire encoding. Never throws on hostile input.</summary>
         /// <param name="value">Encoded signature, as it appeared in the header.</param>
         /// <param name="encoding">Wire encoding to decode from.</param>
         /// <param name="digest">Decoded digest bytes when decoding succeeds; empty otherwise.</param>
-        /// <returns>
-        /// <see langword="false"/> when the value is absent or malformed. A malformed signature is
-        /// never an exception: it is an authentication failure like any other, and throwing here
-        /// would turn a hostile request into a 500.
-        /// </returns>
+        /// <returns><see langword="false"/> when the value is absent or malformed.</returns>
         public static bool TryDecode(string? value, SignatureEncoding encoding, out byte[] digest)
         {
             digest = Array.Empty<byte>();
@@ -97,7 +90,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         {
             digest = Array.Empty<byte>();
 
-            if (value.Length == 0 || (value.Length % 2) != 0)
+            if ((value.Length % 2) != 0)
             {
                 return false;
             }

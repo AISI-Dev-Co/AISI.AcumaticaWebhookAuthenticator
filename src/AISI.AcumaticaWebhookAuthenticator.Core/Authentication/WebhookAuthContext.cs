@@ -21,23 +21,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             string? path,
             DateTimeOffset receivedOn,
             Guid? webhookId = null)
+            : this(body, Copy(headers), method, path, receivedOn, webhookId)
         {
-            if (headers is null)
-            {
-                throw new ArgumentNullException(nameof(headers));
-            }
-
-            Body = body ?? throw new ArgumentNullException(nameof(body));
-            Method = method;
-            Path = path;
-            ReceivedOn = receivedOn;
-            WebhookId = webhookId;
-
-            _headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-            foreach (KeyValuePair<string, IReadOnlyList<string>> header in headers)
-            {
-                _headers[header.Key] = Sanitize(header.Value);
-            }
         }
 
         /// <summary>Creates a context from single-valued headers.</summary>
@@ -51,13 +36,26 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             : this(body, Widen(headers), method, path, receivedOn, webhookId)
         {
         }
+
+        private WebhookAuthContext(
+            byte[] body,
+            Dictionary<string, IReadOnlyList<string>> headers,
+            string? method,
+            string? path,
+            DateTimeOffset receivedOn,
+            Guid? webhookId)
+        {
+            Body = body ?? throw new ArgumentNullException(nameof(body));
+            _headers = headers;
+            Method = method;
+            Path = path;
+            ReceivedOn = receivedOn;
+            WebhookId = webhookId;
+        }
         #endregion
 
         #region Request data
-        /// <summary>
-        /// Raw request body bytes, exactly as received. This is the live array the caller supplied,
-        /// not a copy; treat it as read-only.
-        /// </summary>
+        /// <summary>Raw request body as received: the caller's array, not a copy, so treat it as read-only.</summary>
         public byte[] Body { get; }
 
         /// <summary>HTTP method, or <see langword="null"/> when the platform did not surface one.</summary>
@@ -69,20 +67,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <summary>When the request arrived.</summary>
         public DateTimeOffset ReceivedOn { get; }
 
-        /// <summary>
-        /// The webhook registration this request arrived on, when the host surfaces one.
-        /// JWT audience binding uses this by default so a reused secret cannot cross webhooks.
-        /// </summary>
+        /// <summary>The webhook registration this request arrived on, when the host surfaces one.</summary>
         public Guid? WebhookId { get; }
-
-        /// <summary>Request headers, matched case-insensitively.</summary>
-        public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers => _headers;
         #endregion
 
         #region Header lookup
-        /// <summary>
-        /// Looks up every value of a header, case-insensitively.
-        /// </summary>
+        /// <summary>Looks up every value of a header, case-insensitively.</summary>
         /// <param name="name">Header name.</param>
         /// <param name="values">The values when present, otherwise empty. Never null.</param>
         /// <returns><see langword="true"/> when the header is present with at least one value.</returns>
@@ -98,17 +88,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return false;
         }
 
-        /// <summary>
-        /// Looks up a header as a single string, case-insensitively.
-        /// </summary>
+        /// <summary>Looks up a header as a single string, case-insensitively.</summary>
         /// <param name="name">Header name.</param>
-        /// <param name="value">
-        /// The header value when present, otherwise <see cref="string.Empty"/>. Never null, so a
-        /// caller that ignores the return value cannot end up passing null onward. A repeated header
-        /// is joined with "," as HTTP field-value folding specifies — which is what the
-        /// <c>{header:Name}</c> template token needs, and why signature extraction uses
-        /// <see cref="TryGetHeaderValues"/> instead.
-        /// </param>
+        /// <param name="value">The value, or empty when absent. A repeated header is joined with ",".</param>
         /// <returns><see langword="true"/> when the header is present.</returns>
         public bool TryGetHeader(string name, out string value)
         {
@@ -123,7 +105,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         }
         #endregion
 
-        #region Internals
+        #region Header normalisation
+        private static Dictionary<string, IReadOnlyList<string>> Copy(
+            IReadOnlyDictionary<string, IReadOnlyList<string>> headers)
+        {
+            if (headers is null)
+            {
+                throw new ArgumentNullException(nameof(headers));
+            }
+
+            var copy = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, IReadOnlyList<string>> header in headers)
+            {
+                copy[header.Key] = Sanitize(header.Value);
+            }
+
+            return copy;
+        }
+
         private static Dictionary<string, IReadOnlyList<string>> Widen(
             IReadOnlyDictionary<string, string> headers)
         {
@@ -135,11 +134,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             var widened = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> header in headers)
             {
-                // The nullable annotations promise non-null values, but the intended caller is a
-                // net48 adapter where the compiler enforces nothing. A null slipping through here
-                // would surface as an ArgumentNullException inside template resolution - a 500 on
-                // the request path, which this library's own rules forbid.
-                widened[header.Key] = new[] { header.Value is null ? string.Empty : header.Value };
+                // net48 callers get no nullable enforcement; a null must become empty, not a 500.
+                widened[header.Key] = new[] { header.Value ?? string.Empty };
             }
 
             return widened;
@@ -167,11 +163,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return values;
             }
 
-            // Copied only on the rare null-carrying path, so the common case stays allocation-free.
             var cleaned = new string[values.Count];
             for (int i = 0; i < values.Count; i++)
             {
-                cleaned[i] = values[i] is null ? string.Empty : values[i];
+                cleaned[i] = values[i] ?? string.Empty;
             }
 
             return cleaned;

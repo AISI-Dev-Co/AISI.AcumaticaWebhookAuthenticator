@@ -9,12 +9,7 @@ using Xunit;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Tests
 {
-    /// <summary>
-    /// The nullable annotations promise the context non-null header values, but the intended caller
-    /// is a net48 adapter where the compiler enforces nothing. A null slipping through must degrade
-    /// to an empty value and a 401, never surface as an exception — the library's own rule is that
-    /// a hostile or odd request becomes a 401, not a 500.
-    /// </summary>
+    /// <summary>net48 callers get no nullable enforcement: null header values must degrade to empty, never throw.</summary>
     public class ContextHardeningTests
     {
         [Fact]
@@ -41,15 +36,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 Array.Empty<byte>(), headers, "POST", null, DateTimeOffset.UnixEpoch);
 
             Assert.True(request.TryGetHeaderValues("X-Odd", out IReadOnlyList<string> values));
-            Assert.Equal(string.Empty, values[0]);
-            Assert.Equal("real", values[1]);
+            Assert.Equal(new[] { string.Empty, "real" }, values);
         }
 
         [Fact]
         public void ATemplateReferencingANullValuedHeaderResolvesRatherThanThrowing()
         {
-            // The failure this pins: Encoding.UTF8.GetBytes(null) inside template resolution,
-            // reached through TryGetHeader returning true with a null value.
             var headers = new Dictionary<string, string> { ["X-Request-Id"] = null! };
 
             WebhookAuthContext request = new WebhookAuthContext(
@@ -66,14 +58,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void ABodyOnlyTemplateAliasesTheBodyInsteadOfCopyingIt()
         {
-            // The template's own doc refuses a per-request defensive copy of the body; the
-            // resolution path must not quietly reintroduce one for the most common template.
             byte[] body = { 1, 2, 3, 4 };
             WebhookAuthContext request = RequestBuilder.Post().WithBodyBytes(body).Build();
 
             TemplateResolution resolution = SignedPayloadTemplate.Body.Resolve(request, null);
 
             Assert.Same(body, resolution.Bytes);
+        }
+
+        [Fact]
+        public void AnAbsentHeaderYieldsEmptyRatherThanNull()
+        {
+            WebhookAuthContext request = RequestBuilder.Post().WithBody("x").Build();
+
+            Assert.False(request.TryGetHeader("X-Absent", out string value));
+            Assert.Equal(string.Empty, value);
         }
     }
 }

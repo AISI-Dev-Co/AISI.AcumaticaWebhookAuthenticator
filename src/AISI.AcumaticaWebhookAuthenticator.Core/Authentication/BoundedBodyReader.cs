@@ -7,19 +7,13 @@ using System.Threading.Tasks;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// Reads a request body into a byte array while enforcing a size cap.
-    /// </summary>
-    /// <remarks>
-    /// The cap is enforced <em>while reading</em>: <c>Content-Length</c> is absent under chunked
-    /// encoding and sender-controlled when present, so it serves only as a capacity hint and a
-    /// fast reject. The returned buffer is the one to verify against and deserialise from — read
-    /// once, share the buffer. <see cref="DefaultMaxLength"/> is the platform's own 1 MB cap.
-    /// </remarks>
+    /// <summary>Reads a request body into a byte array, enforcing the size cap while reading.</summary>
     public static class BoundedBodyReader
     {
         /// <summary>The platform's own inbound body cap: 1 MB.</summary>
         public const int DefaultMaxLength = 1024 * 1024;
+
+        internal const int MaxInitialCapacity = 64 * 1024;
 
         private const int ChunkSize = 16 * 1024;
 
@@ -60,10 +54,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
-        /// <summary>
-        /// Validates arguments and sizes the accumulation buffer, or returns null when the declared
-        /// length already exceeds the cap.
-        /// </summary>
         private static MemoryStream? Start(Stream source, int maxLength, long? declaredLength)
         {
             if (source is null)
@@ -76,15 +66,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentOutOfRangeException(nameof(maxLength), maxLength, "The cap cannot be negative.");
             }
 
-            if (declaredLength is object && declaredLength.Value > maxLength)
+            if (declaredLength.HasValue && declaredLength.Value > maxLength)
             {
                 return null;
             }
 
-            // Clamped even though it just passed the check above: a negative declared length is
-            // nonsense a sender can also produce, and MemoryStream would throw on it.
-            int capacity = declaredLength is object && declaredLength.Value > 0
-                ? (int)Math.Min(declaredLength.Value, maxLength)
+            // Content-Length is sender-controlled, so it sizes the buffer only up to a small bound.
+            int capacity = declaredLength.HasValue && declaredLength.Value > 0
+                ? (int)Math.Min(declaredLength.Value, MaxInitialCapacity)
                 : Math.Min(ChunkSize, maxLength);
 
             return new MemoryStream(capacity);
