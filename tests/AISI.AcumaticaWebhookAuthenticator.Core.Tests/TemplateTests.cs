@@ -1,6 +1,7 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
+using System.Linq;
 using System.Text;
 using AISI.AcumaticaWebhookAuthenticator.Authentication;
 using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
@@ -11,31 +12,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 {
     public class TemplateTests
     {
-        [Fact]
-        public void BodyToken_ContributesRawBytesVerbatim()
+        [Theory]
+        [InlineData(new byte[] { 0x7B, 0xFF, 0xFE, 0x00, 0x22, 0x7D })]
+        [InlineData(new byte[] { 0xEF, 0xBB, 0xBF, 0x7B, 0x7D })]
+        public void BodyBytesAreSignedVerbatim(byte[] body)
         {
-            // The whole library rests on this. A body that is not valid UTF-8 must reach the digest
-            // unchanged; if the template ever routes the body through a string, these bytes come
-            // back as U+FFFD and every signature over binary or mis-declared content silently
-            // stops matching.
-            byte[] body = { 0x7B, 0xFF, 0xFE, 0x00, 0x22, 0x7D };
-
+            // Invalid UTF-8 and a BOM must survive: routing the body through a string would corrupt both.
             WebhookAuthContext request = RequestBuilder.Post().WithBodyBytes(body).Build();
-            TemplateResolution resolution = SignedPayloadTemplate.Body.Resolve(request, null);
+            TemplateResolution resolution = SignedPayloadTemplate.TimestampDotBody.Resolve(request, "1");
 
             Assert.True(resolution.Success);
-            Assert.Equal(body, resolution.Bytes);
-        }
-
-        [Fact]
-        public void BodyToken_PreservesABomRatherThanStrippingIt()
-        {
-            byte[] body = { 0xEF, 0xBB, 0xBF, 0x7B, 0x7D };
-
-            WebhookAuthContext request = RequestBuilder.Post().WithBodyBytes(body).Build();
-            TemplateResolution resolution = SignedPayloadTemplate.Body.Resolve(request, null);
-
-            Assert.Equal(body, resolution.Bytes);
+            Assert.Equal(Encoding.ASCII.GetBytes("1.").Concat(body), resolution.Bytes);
         }
 
         [Fact]
@@ -53,7 +40,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         {
             WebhookAuthContext request = RequestBuilder.Post()
                 .WithBody("x")
-                .WithMethod("POST")
                 .WithPath("/inbound")
                 .Build();
 
@@ -65,17 +51,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal("POST\n/inbound\nx", Encoding.UTF8.GetString(resolution.Bytes));
         }
 
-        [Fact]
-        public void HeaderToken_Resolves()
+        [Theory]
+        [InlineData("{header:X-Request-Id}:{body}")]
+        [InlineData("{ header:X-Request-Id }:{ body }")]
+        public void HeaderToken_Resolves(string pattern)
         {
             WebhookAuthContext request = RequestBuilder.Post()
                 .WithBody("x")
                 .WithHeader("X-Request-Id", "abc123")
                 .Build();
 
-            TemplateResolution resolution = SignedPayloadTemplate
-                .Parse("{header:X-Request-Id}:{body}")
-                .Resolve(request, null);
+            TemplateResolution resolution = SignedPayloadTemplate.Parse(pattern).Resolve(request, null);
 
             Assert.True(resolution.Success);
             Assert.Equal("abc123:x", Encoding.UTF8.GetString(resolution.Bytes));
@@ -118,8 +104,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void UnavailableMethod_FailsWithItsOwnCode()
         {
-            // If the platform turns out not to surface the HTTP method, a template using {method}
-            // should say so rather than report a signature mismatch.
             WebhookAuthContext request = RequestBuilder.Post().WithBody("x").WithoutMethod().Build();
             TemplateResolution resolution = SignedPayloadTemplate.Parse("{method}{body}").Resolve(request, null);
 
@@ -165,9 +149,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [InlineData("", false, false)]
         public void ReferenceFlags_ReportEveryTokenNotJustTheFirst(string pattern, bool timestamp, bool path)
         {
-            // The adapter rejects {path} templates at handler construction on the strength of
-            // ReferencesPath, so a false negative here turns a construction-time error into a
-            // per-request 401. Both flags must be set even when the other token appears first.
             SignedPayloadTemplate template = SignedPayloadTemplate.Parse(pattern);
 
             Assert.Equal(timestamp, template.ReferencesTimestamp);
@@ -179,11 +160,42 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [InlineData("{body")]
         [InlineData("body}")]
         [InlineData("{header:}")]
+        [InlineData("{ header: }")]
         public void MalformedTemplate_ThrowsAtParseTime(string pattern)
         {
-            // Parse time, not request time: a bad template is a developer error and should surface
-            // when the handler is constructed rather than as an unexplained 401 in production.
             Assert.Throws<FormatException>(() => SignedPayloadTemplate.Parse(pattern));
+        }
+
+        [Fact]
+        public void ResolveDoesNotBuildThePreviewByDefault()
+        {
+            WebhookAuthContext request = RequestBuilder.Post().WithBody("a fairly large payload").Build();
+
+            TemplateResolution resolution = SignedPayloadTemplate.Body.Resolve(request, null);
+
+            Assert.True(resolution.Success);
+            Assert.Equal(string.Empty, resolution.Preview);
+        }
+
+        [Fact]
+        public void ResolveBuildsThePreviewWhenAsked()
+        {
+            WebhookAuthContext request = RequestBuilder.Post().WithBody("payload").Build();
+
+            TemplateResolution resolution = SignedPayloadTemplate.Body.Resolve(request, null, capturePreview: true);
+
+            Assert.Equal("payload", resolution.Preview);
+        }
+
+        [Fact]
+        public void TheDigestIsUnaffectedByWhetherThePreviewWasCaptured()
+        {
+            SignedPayloadTemplate template = SignedPayloadTemplate.Parse("x{body}");
+            WebhookAuthContext request = RequestBuilder.Post().WithBodyBytes(new byte[] { 0x7B, 0xFF, 0xFE, 0x7D }).Build();
+
+            Assert.Equal(
+                template.Resolve(request, null).Bytes,
+                template.Resolve(request, null, capturePreview: true).Bytes);
         }
     }
 }

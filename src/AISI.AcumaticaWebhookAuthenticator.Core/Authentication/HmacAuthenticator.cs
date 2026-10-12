@@ -9,23 +9,9 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
     /// <summary>
-    /// Verifies an HMAC signature over a templated payload, optionally inside a replay window.
+    /// Verifies an HMAC signature over a templated payload (<c>HMAC</c>), optionally inside a replay
+    /// window (<c>HMACTS</c>). The options are snapshotted at construction; instances are immutable.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Covers both the <c>HMAC</c> and <c>HMACTS</c> schemes. They differ only in whether a
-    /// timestamp participates, so they are one implementation rather than two near-identical ones;
-    /// <see cref="Code"/> still reports them separately.
-    /// </para>
-    /// <para>
-    /// The configuration is snapshotted at construction. <see cref="HmacAuthOptions"/> is a mutable
-    /// object-initializer bag, and reading it per request would let a later assignment to
-    /// <see cref="HmacAuthOptions.Template"/> or <see cref="HmacAuthOptions.Timestamp"/> walk
-    /// straight past the constructor's coherence check — which is precisely the check standing
-    /// between a replay window and a timestamp nothing signs. Instances are immutable and safe to
-    /// share across threads.
-    /// </para>
-    /// </remarks>
     public sealed class HmacAuthenticator : IWebhookAuthenticator, IRequestPathDependent
     {
         #region Construction and state
@@ -38,16 +24,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private readonly SignedPayloadTemplate _template;
         private readonly TimestampValidation? _timestamp;
 
-        /// <summary>
-        /// Creates an authenticator.
-        /// </summary>
+        /// <summary>Creates an authenticator.</summary>
         /// <param name="options">Scheme configuration. Read once, here.</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
         /// <exception cref="ArgumentException">
-        /// The configuration is incoherent, as described by
-        /// <see cref="HmacAuthOptions.DescribeMisconfiguration"/>. Chiefly: a replay window over a
-        /// timestamp the template does not sign is security theatre, since the signature does not
-        /// cover it and a replayer rewrites it freely.
+        /// The configuration is incoherent, as described by <see cref="HmacAuthOptions.DescribeMisconfiguration"/>.
         /// </exception>
         public HmacAuthenticator(HmacAuthOptions options)
         {
@@ -62,6 +43,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentException(problem, nameof(options));
             }
 
+            // Copied, not read per request, so a later assignment cannot bypass the coherence check above.
             _secretProvider = options.SecretProvider;
             _signatureHeader = options.SignatureHeader;
             _algorithm = options.Algorithm;
@@ -77,10 +59,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <inheritdoc/>
         public string Code => _timestamp is null ? "HMAC" : "HMACTS";
 
-        /// <summary>
-        /// Whether the construction-time template snapshot signs <c>{path}</c>, and therefore
-        /// whether a host with no request path should reject this configuration up front.
-        /// </summary>
+        /// <summary>Whether the template signs <c>{path}</c>, which a host with no request path must reject up front.</summary>
         public bool RequiresRequestPath => _template.ReferencesPath;
 
         /// <inheritdoc/>
@@ -99,77 +78,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             WebhookSecret? secret = _secretProvider.GetSecret();
             if (secret is null)
             {
-                // A missing secret denies the request. It never degrades to unauthenticated
-                // handling, which would turn a blank secret field into an open endpoint.
+                // Fail closed: a blank secret field must never become an open endpoint.
                 return AuthResult.Fail(AuthFailureCode.SecretUnavailable);
             }
 
-            // A timestamp read out of the signature header belongs to one header value, and the
-            // header may have arrived more than once. Each value's signatures must then verify
-            // against the payload built from that value's own timestamp — pairing every candidate
-            // with the first value's timestamp would make a legitimately signed second value
-            // unverifiable. A timestamp from its own header (or no timestamp) is shared by all
-            // values, so those schemes verify everything against one resolution.
-            if (_timestamp is object && _timestamp.ReadsFromSignatureHeader)
-            {
-                return AuthenticatePerHeaderValue(context, headerValues, secret);
-            }
-
-            string? timestampRaw = _timestamp?.ReadRaw(context, headerValues);
-
-            TemplateResolution resolution = _template.Resolve(context, timestampRaw);
-            if (!resolution.Success)
-            {
-                return AuthResult.Fail(resolution.FailureCode);
-            }
-
-            var rejection = new RejectionTracker();
-            List<byte[]> decoded = DecodeCandidates(_extraction.Extract(headerValues), rejection);
-
-            if (decoded.Count == 0)
-            {
-                return AuthResult.Fail(rejection.Code);
-            }
-
-            if (!secret.MatchesAny(_algorithm, resolution.Bytes, decoded, context.ReceivedOn))
-            {
-                return AuthResult.Fail(AuthFailureCode.SignatureMismatch);
-            }
-
-            // Only now is the timestamp trustworthy. Validating the window earlier would mean acting
-            // on a value nothing has vouched for.
-            return _timestamp is null
-                ? AuthResult.Success()
-                : _timestamp.Validate(timestampRaw, context.ReceivedOn);
-        }
-        #endregion
-
-        #region Internals
-        private AuthResult AuthenticatePerHeaderValue(
-            WebhookAuthContext context,
-            IReadOnlyList<string> headerValues,
-            WebhookSecret secret)
-        {
             var rejection = new RejectionTracker();
 
-            foreach (string headerValue in headerValues)
+            foreach (SignatureGroup group in GroupCandidates(context, headerValues, _extraction, _timestamp))
             {
-                IReadOnlyList<string> candidates = _extraction.Extract(headerValue);
-                if (candidates.Count == 0)
-                {
-                    continue;
-                }
-
-                string? timestampRaw = _timestamp!.ReadRaw(context, new[] { headerValue });
-
-                TemplateResolution resolution = _template.Resolve(context, timestampRaw);
+                TemplateResolution resolution = _template.Resolve(context, group.TimestampRaw);
                 if (!resolution.Success)
                 {
                     rejection.Consider(RejectionTracker.StageTemplate, resolution.FailureCode);
                     continue;
                 }
 
-                List<byte[]> decoded = DecodeCandidates(candidates, rejection);
+                List<byte[]> decoded = DecodeCandidates(group.Candidates, rejection);
                 if (decoded.Count == 0)
                 {
                     continue;
@@ -177,15 +101,46 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
                 if (secret.MatchesAny(_algorithm, resolution.Bytes, decoded, context.ReceivedOn))
                 {
-                    // The window is checked against the timestamp that produced the matching
-                    // payload — not against whichever value happened to carry the freshest one.
-                    return _timestamp.Validate(timestampRaw, context.ReceivedOn);
+                    // Only a verified timestamp is trusted, and it must be the one this group was signed over.
+                    return _timestamp is null
+                        ? AuthResult.Success()
+                        : _timestamp.Validate(group.TimestampRaw, context.ReceivedOn);
                 }
 
                 rejection.Consider(RejectionTracker.StageCompare, AuthFailureCode.SignatureMismatch);
             }
 
             return AuthResult.Fail(rejection.Code);
+        }
+        #endregion
+
+        #region Internals
+        /// <summary>
+        /// Pairs signature candidates with the timestamp they were signed over: one group per signature
+        /// header value when the timestamp lives in that header, otherwise one group for the request.
+        /// </summary>
+        internal static IEnumerable<SignatureGroup> GroupCandidates(
+            WebhookAuthContext context,
+            IReadOnlyList<string> headerValues,
+            SignatureExtraction extraction,
+            TimestampValidation? timestamp)
+        {
+            if (timestamp is null || !timestamp.ReadsFromSignatureHeader)
+            {
+                yield return new SignatureGroup(extraction.Extract(headerValues), timestamp?.ReadRaw(context, headerValues));
+                yield break;
+            }
+
+            foreach (string headerValue in headerValues)
+            {
+                IReadOnlyList<string> candidates = extraction.Extract(headerValue);
+                if (candidates.Count == 0)
+                {
+                    continue;
+                }
+
+                yield return new SignatureGroup(candidates, timestamp.ReadRaw(context, new[] { headerValue }));
+            }
         }
 
         private List<byte[]> DecodeCandidates(IReadOnlyList<string> candidates, RejectionTracker rejection)
@@ -212,12 +167,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return decoded;
         }
 
-        /// <summary>
-        /// Keeps the diagnostic code from the candidate that progressed furthest through the
-        /// pipeline, so the trace names the most specific problem rather than whichever candidate
-        /// happened to fail last. A request carrying both a malformed-but-prefixed signature and an
-        /// unprefixed one reports "malformed", in either order.
-        /// </summary>
+        internal readonly struct SignatureGroup
+        {
+            public SignatureGroup(IReadOnlyList<string> candidates, string? timestampRaw)
+            {
+                Candidates = candidates;
+                TimestampRaw = timestampRaw;
+            }
+
+            public IReadOnlyList<string> Candidates { get; }
+
+            public string? TimestampRaw { get; }
+        }
+
+        /// <summary>Keeps the code from the candidate that got furthest, so the trace names the most specific failure in any order.</summary>
         private sealed class RejectionTracker
         {
             public const int StageTemplate = 1;
@@ -239,6 +202,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
         #endregion
-
     }
 }

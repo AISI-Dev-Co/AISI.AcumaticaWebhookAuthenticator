@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using AISI.AcumaticaWebhookAuthenticator.Configuration;
@@ -11,28 +10,11 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// The <c>JWT</c> scheme: compact JWS (HS256 / HS512) carried in a header.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The HMAC covers the JWT's own <c>header.payload</c> bytes (RFC 7515). It does
-    /// <em>not</em> MAC the HTTP body. That is the same class of unbound credential as
-    /// <c>SECRET</c> and <c>BASIC</c> unless the payload carries the body-hash claim
-    /// (<see cref="JwtAuthOptions.BodyHashClaimName"/>, SHA-256 of the raw body, compared
-    /// constant-time). The default configuration requires that claim. Prefer a real
-    /// body-HMAC scheme (<see cref="HmacAuthenticator"/>) when the sender can sign the
-    /// request bytes.
-    /// </para>
-    /// <para>
-    /// Audience defaults to the webhook registration id so a reused secret cannot be
-    /// presented to a different webhook. <c>iss</c> is checked only when configured.
-    /// Immutable and safe to share across threads.
-    /// </para>
-    /// </remarks>
+    /// <summary>The <c>JWT</c> scheme: an HS256/HS512 compact JWS in a header; the body is bound only through the <c>bh</c> claim.</summary>
     public sealed class JwtAuthenticator : IWebhookAuthenticator, IChallengeSource
     {
-        internal static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        // Throws on invalid bytes: replacement decoding would let a malformed segment parse.
+        private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _tokenHeader;
@@ -63,7 +45,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             _secretProvider = options.SecretProvider;
             _tokenHeader = options.TokenHeader;
-            _schemePrefix = options.SchemePrefix;
+            _schemePrefix = string.IsNullOrEmpty(options.SchemePrefix) ? null : options.SchemePrefix;
             _algorithm = options.Algorithm;
             _jwtAlg = options.JwtAlgorithmName!;
             _issuer = string.IsNullOrEmpty(options.Issuer) ? null : options.Issuer;
@@ -79,10 +61,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <inheritdoc/>
         public string Code => "JWT";
 
-        /// <summary>
-        /// RFC 6750-style <c>WWW-Authenticate</c> value for a 401, matching
-        /// <see cref="JwtAuthOptions.SchemePrefix"/> (or the token header when there is no prefix).
-        /// </summary>
+        /// <summary>RFC 6750-style <c>WWW-Authenticate</c> value for a 401.</summary>
         public string Challenge { get; }
 
         /// <inheritdoc/>
@@ -93,23 +72,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentNullException(nameof(context));
             }
 
-            try
-            {
-                return AuthenticateCore(context);
-            }
-            catch (Exception exception) when (
-                exception is ArgumentOutOfRangeException ||
-                exception is OverflowException ||
-                exception is FormatException ||
-                exception is InvalidOperationException)
-            {
-                // Signed junk, overflowed NumericDate, or a hostile compact token: 401, never 500.
-                return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-        }
-
-        private AuthResult AuthenticateCore(WebhookAuthContext context)
-        {
             if (!context.TryGetHeaderValues(_tokenHeader, out IReadOnlyList<string> headerValues))
             {
                 return AuthResult.Fail(AuthFailureCode.CredentialMissing);
@@ -122,8 +84,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
 
             AuthResult? firstFailure = null;
-            bool anyWellFormed = false;
-
             foreach (string headerValue in headerValues)
             {
                 if (!TryExtractToken(headerValue, out string compact))
@@ -131,51 +91,35 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                     continue;
                 }
 
-                anyWellFormed = true;
                 AuthResult result = AuthenticateToken(compact, secret, context);
                 if (result.Succeeded)
                 {
                     return result;
                 }
 
-                if (firstFailure is null)
-                {
-                    firstFailure = result;
-                }
+                firstFailure ??= result;
             }
 
-            if (!anyWellFormed)
+            return firstFailure ?? AuthResult.Fail(AuthFailureCode.CredentialMalformed);
+        }
+
+        internal static byte[] ComputeBodyHash(byte[] body)
+        {
+            using (SHA256 sha = SHA256.Create())
             {
-                return AuthResult.Fail(AuthFailureCode.CredentialMalformed);
+                return sha.ComputeHash(body);
             }
-
-            return firstFailure ?? AuthResult.Fail(AuthFailureCode.JwtMalformed);
         }
 
         private bool TryExtractToken(string headerValue, out string token)
         {
-            token = string.Empty;
-
-            if (string.IsNullOrEmpty(_schemePrefix))
+            if (_schemePrefix is null)
             {
-                string trimmed = headerValue.Trim();
-                if (trimmed.Length == 0)
-                {
-                    return false;
-                }
-
-                token = trimmed;
-                return true;
+                token = headerValue.Trim();
+                return token.Length > 0;
             }
 
-            if (headerValue.Length <= _schemePrefix!.Length ||
-                !headerValue.StartsWith(_schemePrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            token = headerValue.Substring(_schemePrefix.Length).Trim(' ');
-            return token.Length > 0;
+            return CredentialVerifier.TryStripScheme(headerValue, _schemePrefix, out token);
         }
 
         private AuthResult AuthenticateToken(string compact, WebhookSecret secret, WebhookAuthContext context)
@@ -196,24 +140,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             string payloadSegment = compact.Substring(firstDot + 1, secondDot - firstDot - 1);
             string signatureSegment = compact.Substring(secondDot + 1);
 
-            if (!TryBase64UrlDecode(headerSegment, out byte[] headerBytes))
-            {
-                return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-
-            if (!TryUtf8(headerBytes, out string headerJson))
-            {
-                return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-
-            if (!JwtJsonObject.TryParse(headerJson, out JwtJsonObject header) || header.HasDuplicates)
+            JwtJsonObject? header = DecodeJson(headerSegment);
+            if (header is null)
             {
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
 
             if (header.Contains("crit"))
             {
-                // RFC 7515 §4.1.11: unsupported crit members (we support none) MUST reject the JWS.
+                // RFC 7515 §4.1.11: we understand no crit extensions, so any crit MUST reject.
                 return AuthResult.Fail(AuthFailureCode.JwtCriticalHeader);
             }
 
@@ -223,36 +158,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return AuthResult.Fail(AuthFailureCode.JwtAlgorithmRejected);
             }
 
-            if (signatureSegment.Length == 0 ||
-                !TryBase64UrlDecode(signatureSegment, out byte[] signature))
+            if (!TryBase64UrlDecode(signatureSegment, out byte[] signature))
             {
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
             }
 
-            byte[] signingInput = Encoding.ASCII.GetBytes(headerSegment + "." + payloadSegment);
-            if (!secret.MatchesAny(_algorithm, signingInput, new[] { signature }, context.ReceivedOn))
+            byte[] signingInput = Encoding.ASCII.GetBytes(compact.Substring(0, secondDot));
+            if (!secret.Matches(_algorithm, signingInput, signature, context.ReceivedOn))
             {
                 return AuthResult.Fail(AuthFailureCode.SignatureMismatch);
             }
 
-            if (!TryBase64UrlDecode(payloadSegment, out byte[] payloadBytes))
+            JwtJsonObject? payload = DecodeJson(payloadSegment);
+            if (payload is null)
             {
                 return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-
-            if (!TryUtf8(payloadBytes, out string payloadJson))
-            {
-                return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-
-            if (!JwtJsonObject.TryParse(payloadJson, out JwtJsonObject payload) || payload.HasDuplicates)
-            {
-                return AuthResult.Fail(AuthFailureCode.JwtMalformed);
-            }
-
-            if (_requireExpiration && !payload.Contains("exp"))
-            {
-                return AuthResult.Fail(AuthFailureCode.JwtExpirationMissing);
             }
 
             if (payload.Contains("exp"))
@@ -267,6 +187,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 {
                     return AuthResult.Fail(AuthFailureCode.JwtExpired);
                 }
+            }
+            else if (_requireExpiration)
+            {
+                return AuthResult.Fail(AuthFailureCode.JwtExpirationMissing);
             }
 
             if (payload.Contains("nbf"))
@@ -291,8 +215,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 }
             }
 
-            string? expectedAudience = ResolveAudience(context);
-            if (expectedAudience is object && !AudienceContains(payload, expectedAudience))
+            if (!AudienceAccepted(payload, context))
             {
                 return AuthResult.Fail(AuthFailureCode.JwtAudienceMismatch);
             }
@@ -322,51 +245,26 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return AuthResult.Success();
         }
 
-        private string? ResolveAudience(WebhookAuthContext context)
+        private bool AudienceAccepted(JwtJsonObject payload, WebhookAuthContext context)
         {
             if (_audience is object)
             {
-                return _audience;
+                return AudienceContains(payload, _audience);
             }
 
             if (!_bindAudienceToWebhookId)
             {
-                return null;
+                return true;
             }
 
-            return context.WebhookId is Guid id ? id.ToString("D") : string.Empty;
-        }
-
-        internal static string Compact(HmacAlgorithm algorithm, byte[] key, string payloadJson)
-        {
-            string alg = algorithm == HmacAlgorithm.Sha512 ? "HS512" : "HS256";
-            string headerJson = "{\"alg\":\"" + alg + "\",\"typ\":\"JWT\"}";
-            string header = Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
-            string payload = Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
-            byte[] signature = HmacComputer.Compute(
-                algorithm,
-                key,
-                Encoding.ASCII.GetBytes(header + "." + payload));
-            return header + "." + payload + "." + Base64UrlEncode(signature);
-        }
-
-        internal static string Base64UrlEncode(byte[] data)
-        {
-            return Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        }
-
-        internal static byte[] ComputeBodyHash(byte[] body)
-        {
-            using (SHA256 sha = SHA256.Create())
-            {
-                return sha.ComputeHash(body ?? Array.Empty<byte>());
-            }
+            // No webhook id means nothing to bind to: fail closed rather than accept "aud":"".
+            return context.WebhookId is Guid id && AudienceContains(payload, id.ToString("D"));
         }
 
         private static string BuildChallenge(string tokenHeader, string? schemePrefix)
         {
             string scheme;
-            if (schemePrefix is object && schemePrefix.Length > 0)
+            if (schemePrefix is object)
             {
                 scheme = schemePrefix.Trim();
                 int space = scheme.IndexOf(' ');
@@ -380,25 +278,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 scheme = tokenHeader.Trim();
             }
 
-            if (scheme.Length == 0 || ContainsHeaderInjection(scheme))
+            if (scheme.Length == 0)
             {
                 scheme = "Bearer";
             }
 
             return scheme + " realm=\"webhook\"";
-        }
-
-        private static bool ContainsHeaderInjection(string value)
-        {
-            foreach (char c in value)
-            {
-                if (c == '"' || c == '\\' || char.IsControl(c))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static bool TryUnixInstant(long seconds, TimeSpan skew, bool addSkew, out DateTimeOffset value)
@@ -425,18 +310,24 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
-        private static bool TryUtf8(byte[] bytes, out string text)
+        private static JwtJsonObject? DecodeJson(string segment)
         {
+            if (!TryBase64UrlDecode(segment, out byte[] bytes))
+            {
+                return null;
+            }
+
+            string json;
             try
             {
-                text = Utf8Strict.GetString(bytes);
-                return true;
+                json = Utf8Strict.GetString(bytes);
             }
             catch (DecoderFallbackException)
             {
-                text = string.Empty;
-                return false;
+                return null;
             }
+
+            return JwtJsonObject.TryParse(json, out JwtJsonObject parsed) ? parsed : null;
         }
 
         private static bool TryBase64UrlDecode(string value, out byte[] bytes)

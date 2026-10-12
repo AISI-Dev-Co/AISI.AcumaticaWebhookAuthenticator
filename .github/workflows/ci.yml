@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -15,11 +19,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # The Core and test projects are built by name rather than through the solution: the
-      # solution also contains the Acumatica adapter, which references licensed PX.* assemblies
-      # from a site's Bin and cannot compile here — Acumatica publishes no PX.* packages. The
-      # adapter fails loudly (not silently no-ops) when AcumaticaBinPath is missing, so including
-      # it would fail every run; it is verified locally against a real site instead.
+      # Core and tests only: the adapter needs licensed PX.* assemblies from a site Bin.
       - name: Restore
         run: dotnet restore tests/AISI.AcumaticaWebhookAuthenticator.Core.Tests
 
@@ -32,9 +32,7 @@ jobs:
       - name: Pack
         run: dotnet pack src/AISI.AcumaticaWebhookAuthenticator.Core --no-build --configuration Release --output ./artifacts
 
-      # Acumatica assemblies are licensed and must never be redistributed. Acumatica's own webhook
-      # sample omits <Private>False</Private> on its PX.Api.Webhooks.Abstractions reference, which
-      # copies one into the output — this is the check that stops that mistake reaching a package.
+      # Acumatica assemblies are licensed and must never be redistributed.
       - name: Assert no Acumatica assemblies in the package
         run: |
           set -euo pipefail
@@ -46,3 +44,9 @@ jobs:
             fi
           done
           echo "No Acumatica assemblies found."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
+          if-no-files-found: error

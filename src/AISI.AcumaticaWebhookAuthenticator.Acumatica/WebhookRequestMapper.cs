@@ -42,8 +42,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 headers[header.Key] = values;
             }
 
-            // Path is null: WebhookRequest has no path member, and handler construction rejects
-            // {path} templates so it is never consulted.
+            // WebhookRequest has no path; the handler base rejects {path} templates before any request reaches here.
             return new WebhookAuthContext(body, headers, request.Method, null, receivedOn, webhookId);
         }
     }

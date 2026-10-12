@@ -7,10 +7,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     /// <summary>Constant-time equality for secret material. Length is not treated as secret.</summary>
     public static class FixedTimeComparer
     {
-        /// <summary>
-        /// Compares two byte sequences in time that does not depend on the position of the first
-        /// difference.
-        /// </summary>
+        /// <summary>Compares two byte sequences in time independent of where they first differ.</summary>
         /// <param name="left">First sequence. May be <see langword="null"/>.</param>
         /// <param name="right">Second sequence. May be <see langword="null"/>.</param>
         /// <returns>
@@ -33,9 +30,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
 
             for (int i = 0; i < left.Length; i++)
             {
-                // XOR, not subtraction: the difference of two bytes is a signed quantity whose sign
-                // bit sets high bits in the accumulator, which happens to work but obscures the
-                // invariant. XOR yields zero if and only if the bytes are equal.
                 accumulator |= left[i] ^ right[i];
             }
 

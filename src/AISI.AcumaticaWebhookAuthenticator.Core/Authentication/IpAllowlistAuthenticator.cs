@@ -25,9 +25,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <param name="inner">The authenticator that runs for allowed callers.</param>
         /// <param name="allowlist">The allowed addresses and blocks.</param>
         /// <param name="clientAddressHeader">The header the trusted proxy records the caller's address in.</param>
-        /// <param name="trustedProxyDepth">
-        /// How many trailing entries of the header were appended by trusted infrastructure.
-        /// </param>
+        /// <param name="trustedProxyDepth">How many trailing entries of the header were appended by trusted infrastructure.</param>
         /// <exception cref="ArgumentNullException"><paramref name="inner"/> or <paramref name="allowlist"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="clientAddressHeader"/> is null or blank.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="trustedProxyDepth"/> is less than 1.</exception>
@@ -64,10 +62,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         /// <summary>How many trailing header entries are trusted; the client is read at this depth.</summary>
         public int TrustedProxyDepth { get; }
 
-        /// <summary>
-        /// The inner scheme's code with an <c>+IP</c> suffix, so a trace shows the gate is in
-        /// force.
-        /// </summary>
+        /// <summary>The inner scheme's code with an <c>+IP</c> suffix, so a trace shows the gate is in force.</summary>
         public string Code => Inner.Code + "+IP";
 
         /// <summary>The inner scheme's challenge, so wrapping never silently drops it.</summary>
@@ -105,32 +100,35 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         }
         #endregion
 
-        #region Internals
+        #region Address parsing
         private bool TryReadClientAddress(IReadOnlyList<string> headerValues, out IPAddress? address)
         {
-            address = null;
-
-            // A header sent as several lines is equivalent to one comma-joined line; flattening in
-            // arrival order preserves the append semantics the depth count relies on.
-            var entries = new List<string>();
-
-            foreach (string headerValue in headerValues)
+            // Repeated header lines are equivalent to one comma-joined line; walk its entries right to left.
+            int remaining = TrustedProxyDepth;
+            for (int line = headerValues.Count - 1; line >= 0; line--)
             {
-                foreach (string part in headerValue.Split(','))
+                string value = headerValues[line];
+                int end = value.Length;
+                while (true)
                 {
-                    entries.Add(part.Trim());
+                    int comma = end == 0 ? -1 : value.LastIndexOf(',', end - 1);
+                    if (--remaining == 0)
+                    {
+                        return TryParseAddress(value.Substring(comma + 1, end - comma - 1).Trim(), out address);
+                    }
+
+                    if (comma < 0)
+                    {
+                        break;
+                    }
+
+                    end = comma;
                 }
             }
 
-            if (entries.Count < TrustedProxyDepth)
-            {
-                // The proxy chain this configuration describes did not handle the request, so
-                // nothing in the header is evidence.
-                return false;
-            }
-
-            string candidate = entries[entries.Count - TrustedProxyDepth];
-            return TryParseAddress(candidate, out address);
+            // Fewer entries than trusted proxies: the configured chain did not handle this request.
+            address = null;
+            return false;
         }
 
         private static bool TryParseAddress(string text, out IPAddress? address)
@@ -142,9 +140,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return false;
             }
 
-            // Bracketed IPv6, alone or with a numeric port: [2001:db8::1] or [2001:db8::1]:4711.
-            // Anything after the bracket that is not a well-formed port is malformed, not
-            // ignorable - "unparseable fails closed" has to mean the whole entry.
+            // [v6] or [v6]:port; anything else after the bracket fails the whole entry.
             if (text[0] == '[')
             {
                 int close = text.IndexOf(']');
@@ -161,9 +157,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 return true;
             }
 
-            // Some front ends (IIS ARR among them) append IPv4 with a port. A lone colon cannot be
-            // part of an IPv4 literal, so splitting at the last one is unambiguous; IPv6 with a
-            // port must use brackets.
+            // IPv4 with a port (IIS ARR): a single colon is unambiguous, as IPv6 with a port must be bracketed.
             int lastColon = text.LastIndexOf(':');
             if (lastColon > 0 && text.IndexOf(':') == lastColon && IsPort(text, lastColon + 1))
             {

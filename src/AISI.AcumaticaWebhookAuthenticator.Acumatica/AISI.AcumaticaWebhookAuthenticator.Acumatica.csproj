@@ -1,22 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!--
-      net48 because that is what Acumatica 2025 R2 and 2026 R1 run the handler in. The
-      platform-agnostic logic lives in the netstandard2.0 Core project; this assembly is the thin
-      binding to PX.* and is the only shipped one that needs a site's Bin to compile.
-      RequiresAcumaticaBin brings in the shared Bin-path guard and the Acuminator analyzers from
-      Directory.Build.props.
-    -->
+    <!-- net48 is the runtime Acumatica 2025 R2 and 2026 R1 load handlers into. -->
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Acumatica</AssemblyName>
     <RootNamespace>AISI.AcumaticaWebhookAuthenticator.Acumatica</RootNamespace>
     <Description>Acumatica ERP binding for AISI.AcumaticaWebhookAuthenticator: IWebhookHandler base with authentication, DAC-backed secret storage, and a maintenance graph.</Description>
-    <!--
-      Not packable. Acumatica publishes no PX.* packages to nuget.org, so a package of this
-      assembly could not declare its real dependencies; it ships inside a customization project
-      instead. Only the Core package goes to NuGet.
-    -->
+    <!-- Acumatica publishes no PX.* packages, so this ships in the customization package, not on NuGet. -->
     <IsPackable>false</IsPackable>
     <RequiresAcumaticaBin>true</RequiresAcumaticaBin>
   </PropertyGroup>
@@ -25,11 +15,7 @@
     <ProjectReference Include="..\AISI.AcumaticaWebhookAuthenticator.Core\AISI.AcumaticaWebhookAuthenticator.Core.csproj" />
   </ItemGroup>
 
-  <!--
-    Every Acumatica reference carries <Private>False</Private> so no licensed assembly is copied
-    into the output. Acumatica's own webhook sample omits this on its Abstractions reference; do
-    not copy that mistake.
-  -->
+  <!-- Private=False on every site reference: licensed assemblies must never reach the output. -->
   <ItemGroup>
     <Reference Include="PX.Api.Webhooks.Abstractions">
       <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>

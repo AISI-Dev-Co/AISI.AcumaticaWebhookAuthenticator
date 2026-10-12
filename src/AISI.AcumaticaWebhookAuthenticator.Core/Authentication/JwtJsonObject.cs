@@ -7,22 +7,18 @@ using System.Text;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// Fail-closed JSON object reader. Duplicate keys, unhandled escapes, and broken
-    /// structure fail the parse; there is no substring scan for claim names.
-    /// </summary>
+    /// <summary>Fail-closed JSON object reader: duplicate keys, unknown escapes and deep nesting fail the parse.</summary>
     internal sealed class JwtJsonObject
     {
-        private readonly Dictionary<string, Member> _members;
-        private readonly bool _duplicates;
+        // The JOSE header is parsed before the signature is checked, so recursion must stay bounded.
+        internal const int MaxDepth = 16;
 
-        private JwtJsonObject(Dictionary<string, Member> members, bool duplicates)
+        private readonly Dictionary<string, Member> _members;
+
+        private JwtJsonObject(Dictionary<string, Member> members)
         {
             _members = members;
-            _duplicates = duplicates;
         }
-
-        public bool HasDuplicates => _duplicates;
 
         public bool Contains(string name) => _members.ContainsKey(name);
 
@@ -64,38 +60,27 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         public static bool TryParse(string json, out JwtJsonObject parsed)
         {
-            parsed = new JwtJsonObject(new Dictionary<string, Member>(StringComparer.Ordinal), false);
-            if (json is null)
-            {
-                return false;
-            }
-
             int index = 0;
-            if (!TryParseObject(json, ref index, out Dictionary<string, Member> members, out bool duplicates))
+            if (!TryParseObject(json, ref index, 1, out Dictionary<string, Member> members) ||
+                SkipWs(json, index) != json.Length)
             {
+                parsed = new JwtJsonObject(new Dictionary<string, Member>(StringComparer.Ordinal));
                 return false;
             }
 
-            index = SkipWs(json, index);
-            if (index != json.Length)
-            {
-                return false;
-            }
-
-            parsed = new JwtJsonObject(members, duplicates);
-            return !duplicates;
+            parsed = new JwtJsonObject(members);
+            return true;
         }
 
         private static bool TryParseObject(
             string json,
             ref int index,
-            out Dictionary<string, Member> members,
-            out bool duplicates)
+            int depth,
+            out Dictionary<string, Member> members)
         {
             members = new Dictionary<string, Member>(StringComparer.Ordinal);
-            duplicates = false;
             index = SkipWs(json, index);
-            if (index >= json.Length || json[index] != '{')
+            if (depth > MaxDepth || index >= json.Length || json[index] != '{')
             {
                 return false;
             }
@@ -122,14 +107,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 }
 
                 index++;
-                if (!TryReadValue(json, ref index, out Member member))
+                if (!TryReadValue(json, ref index, depth, out Member member) ||
+                    members.ContainsKey(name))
                 {
-                    return false;
-                }
-
-                if (members.ContainsKey(name))
-                {
-                    duplicates = true;
                     return false;
                 }
 
@@ -159,7 +139,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return false;
         }
 
-        private static bool TryReadValue(string json, ref int index, out Member member)
+        private static bool TryReadValue(string json, ref int index, int depth, out Member member)
         {
             member = default;
             index = SkipWs(json, index);
@@ -182,18 +162,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
             if (c == '[')
             {
-                if (!TryReadStringArray(json, ref index, out IReadOnlyList<string> texts))
-                {
-                    return false;
-                }
-
-                member = Member.Array(texts);
-                return true;
+                return TryReadArray(json, ref index, depth + 1, out member);
             }
 
             if (c == '{')
             {
-                if (!TryParseObject(json, ref index, out _, out _))
+                if (!TryParseObject(json, ref index, depth + 1, out _))
                 {
                     return false;
                 }
@@ -218,32 +192,41 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return false;
         }
 
-        private static bool TryReadStringArray(string json, ref int index, out IReadOnlyList<string> values)
+        private static bool TryReadArray(string json, ref int index, int depth, out Member member)
         {
-            values = Array.Empty<string>();
-            if (index >= json.Length || json[index] != '[')
+            member = default;
+            if (depth > MaxDepth || index >= json.Length || json[index] != '[')
             {
                 return false;
             }
 
             index++;
-            var list = new List<string>();
+            var strings = new List<string>();
+            bool allStrings = true;
             index = SkipWs(json, index);
             if (index < json.Length && json[index] == ']')
             {
                 index++;
-                values = list;
+                member = Member.Array(strings);
                 return true;
             }
 
             while (index < json.Length)
             {
-                if (!TryReadString(json, ref index, out string item))
+                if (!TryReadValue(json, ref index, depth, out Member item))
                 {
                     return false;
                 }
 
-                list.Add(item);
+                if (item.Kind == Kind.String)
+                {
+                    strings.Add(item.Text!);
+                }
+                else
+                {
+                    allStrings = false;
+                }
+
                 index = SkipWs(json, index);
                 if (index >= json.Length)
                 {
@@ -253,7 +236,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 if (json[index] == ']')
                 {
                     index++;
-                    values = list;
+                    member = allStrings ? Member.Array(strings) : Member.Other();
                     return true;
                 }
 
@@ -418,7 +401,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                             builder.Append((char)code);
                             break;
                         default:
-                            // Unhandled escape: fail closed rather than swallowing the next character.
+                            // Unknown escape: fail closed rather than swallow the next character.
                             return false;
                     }
 
@@ -488,13 +471,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private static int SkipWs(string json, int index)
         {
-            while (index < json.Length && char.IsWhiteSpace(json[index]))
+            while (index < json.Length && IsJsonWhitespace(json[index]))
             {
                 index++;
             }
 
             return index;
         }
+
+        private static bool IsJsonWhitespace(char c) => c == ' ' || c == '\t' || c == '\r' || c == '\n';
 
         private enum Kind
         {

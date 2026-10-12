@@ -13,25 +13,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         private static SharedSecretAuthenticator Authenticator(string secret, string? prefix = null) =>
             new(new StaticSecretProvider(WebhookSecret.FromUtf8(secret)), "X-Api-Key", prefix);
 
+        private static WebhookAuthContext Request(string apiKey) =>
+            RequestBuilder.Post().WithHeader("X-Api-Key", apiKey).Build();
+
         [Fact]
         public void MatchingSecret_Authenticates()
         {
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithBody("{}")
-                .WithHeader("X-Api-Key", "s3cret")
-                .Build();
-
-            Assert.True(Authenticator("s3cret").Authenticate(request).Succeeded);
+            Assert.True(Authenticator("s3cret").Authenticate(Request("s3cret")).Succeeded);
         }
 
-        [Fact]
-        public void WrongSecret_FailsAsMismatch()
+        [Theory]
+        [InlineData("wrong")]
+        [InlineData("s3cret-and-more")]
+        public void WrongSecret_FailsAsMismatch(string apiKey)
         {
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithHeader("X-Api-Key", "wrong")
-                .Build();
-
-            AuthResult result = Authenticator("s3cret").Authenticate(request);
+            AuthResult result = Authenticator("s3cret").Authenticate(Request(apiKey));
 
             Assert.False(result.Succeeded);
             Assert.Equal(AuthFailureCode.CredentialMismatch, result.FailureCode);
@@ -50,9 +46,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void NullSecret_FailsClosedRatherThanFallingBackToUnauthenticated()
         {
             var authenticator = new SharedSecretAuthenticator(new NullSecretProvider(), "X-Api-Key");
-            WebhookAuthContext request = RequestBuilder.Post().WithHeader("X-Api-Key", "anything").Build();
 
-            AuthResult result = authenticator.Authenticate(request);
+            AuthResult result = authenticator.Authenticate(Request("anything"));
 
             Assert.False(result.Succeeded);
             Assert.Equal(AuthFailureCode.SecretUnavailable, result.FailureCode);
@@ -61,70 +56,37 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         [Fact]
         public void Prefix_IsStrippedBeforeComparison()
         {
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithHeader("X-Api-Key", "Token s3cret")
-                .Build();
-
-            Assert.True(Authenticator("s3cret", "Token ").Authenticate(request).Succeeded);
+            Assert.True(Authenticator("s3cret", "Token ").Authenticate(Request("Token s3cret")).Succeeded);
         }
 
         [Fact]
         public void MissingPrefix_FailsAsMalformed()
         {
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithHeader("X-Api-Key", "s3cret")
-                .Build();
-
-            AuthResult result = Authenticator("s3cret", "Token ").Authenticate(request);
+            AuthResult result = Authenticator("s3cret", "Token ").Authenticate(Request("s3cret"));
 
             Assert.False(result.Succeeded);
             Assert.Equal(AuthFailureCode.CredentialMalformed, result.FailureCode);
         }
 
-        [Fact]
-        public void SecretIsNotTreatedAsAPrefixMatch()
-        {
-            // "s3cret-and-more" starts with the secret; equality must be over the whole value.
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithHeader("X-Api-Key", "s3cret-and-more")
-                .Build();
-
-            Assert.False(Authenticator("s3cret").Authenticate(request).Succeeded);
-        }
-
-        [Fact]
-        public void RotatingSecret_IsAcceptedInsideItsWindow()
+        [Theory]
+        [InlineData(-1, true)]
+        [InlineData(0, true)]
+        [InlineData(1, false)]
+        public void RotatingSecret_IsAcceptedUntilItsExpiry(int hoursFromExpiry, bool accepted)
         {
             var expiry = DateTimeOffset.UnixEpoch.AddDays(1);
             var provider = new StaticSecretProvider(
                 WebhookSecret.FromUtf8("new").WithRotatingUtf8("old", expiry));
-            var authenticator = new SharedSecretAuthenticator(provider, "X-Api-Key");
 
             WebhookAuthContext request = RequestBuilder.Post()
                 .WithHeader("X-Api-Key", "old")
-                .ReceivedAt(expiry.AddHours(-1))
+                .ReceivedAt(expiry.AddHours(hoursFromExpiry))
                 .Build();
 
-            Assert.True(authenticator.Authenticate(request).Succeeded);
-        }
+            AuthResult result = new SharedSecretAuthenticator(provider, "X-Api-Key").Authenticate(request);
 
-        [Fact]
-        public void RotatingSecret_IsRejectedAfterItsWindow()
-        {
-            var expiry = DateTimeOffset.UnixEpoch.AddDays(1);
-            var provider = new StaticSecretProvider(
-                WebhookSecret.FromUtf8("new").WithRotatingUtf8("old", expiry));
-            var authenticator = new SharedSecretAuthenticator(provider, "X-Api-Key");
-
-            WebhookAuthContext request = RequestBuilder.Post()
-                .WithHeader("X-Api-Key", "old")
-                .ReceivedAt(expiry.AddHours(1))
-                .Build();
-
-            AuthResult result = authenticator.Authenticate(request);
-
-            Assert.False(result.Succeeded);
-            Assert.Equal(AuthFailureCode.CredentialMismatch, result.FailureCode);
+            Assert.Equal(accepted, result.Succeeded);
+            Assert.Equal(accepted ? string.Empty : AuthFailureCode.CredentialMismatch, result.FailureCode);
         }
 
         [Fact]
@@ -144,6 +106,5 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
             Assert.Throws<ArgumentException>(() => new SharedSecretAuthenticator(provider, " "));
         }
-
     }
 }

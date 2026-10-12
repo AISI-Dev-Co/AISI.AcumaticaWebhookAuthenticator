@@ -1,3 +1,12 @@
 <template>
     <qp-grid id="grid" wg-container="Secrets_grid" view.bind="Secrets"></qp-grid>
+
+    <qp-panel id="Reveal" caption="New Secret - copy it now, it will not be shown again">
+        <qp-fieldset id="fsReveal" view.bind="Reveal">
+            <field name="NewSecret"></field>
+        </qp-fieldset>
+        <footer>
+            <qp-button id="btnRevealOk" caption="OK" dialog-result="OK"></qp-button>
+        </footer>
+    </qp-panel>
 </template>

@@ -1,13 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!--
-      netstandard2.0 is deliberate. It is consumable from the net48 Acumatica
-      runtime of 2025 R2 and from .NET 8+ once Acumatica completes its move off
-      .NET Framework, so this assembly does not need to be re-targeted or forked
-      when that happens. Nothing in this project references Acumatica, ASP.NET or
-      System.Configuration; the platform binding lives in the adapter assembly.
-    -->
+    <!-- netstandard2.0 so one build serves Acumatica on net48 today and .NET 8+ later; no platform references here. -->
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Core</AssemblyName>
     <RootNamespace>AISI.AcumaticaWebhookAuthenticator</RootNamespace>

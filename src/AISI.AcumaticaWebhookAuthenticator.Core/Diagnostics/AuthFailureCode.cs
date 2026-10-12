@@ -42,9 +42,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 
         /// <summary>The template referenced {path} but the platform did not surface one.</summary>
         public const string TemplatePathUnavailable = "template_path_unavailable";
-
-        /// <summary>The template could not be resolved for a reason not covered above.</summary>
-        public const string TemplateInvalid = "template_invalid";
         #endregion
 
         #region Credential
@@ -105,17 +102,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         /// <summary>The secret provider returned nothing, so the endpoint has no secret configured.</summary>
         public const string SecretUnavailable = "secret_unavailable";
 
-        /// <summary>
-        /// The configuration itself is incoherent and no request could verify against it. Only
-        /// <see cref="WebhookSignatureTester"/> reports this; on the request path the same condition
-        /// is an exception thrown when the authenticator is constructed.
-        /// </summary>
+        /// <summary>The configuration is incoherent. Only <see cref="WebhookSignatureTester"/> reports this; authenticators throw at construction.</summary>
         public const string Misconfigured = "misconfigured";
+        #endregion
 
-        /// <summary>
-        /// A failure with no more specific code. Reported by a default-constructed
-        /// <see cref="Authentication.AuthResult"/>, which no code path should produce.
-        /// </summary>
+        #region Fallback
+        /// <summary>No more specific code. Reported only by a default-constructed <see cref="Authentication.AuthResult"/>.</summary>
         public const string Unspecified = "unspecified";
         #endregion
     }
