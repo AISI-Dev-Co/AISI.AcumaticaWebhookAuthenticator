@@ -29,7 +29,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private readonly bool _requireBodyHash;
         private readonly int _maxTokenLength;
 
-        /// <summary>Creates an authenticator. Options are snapshotted here and never read again.</summary>
         public JwtAuthenticator(JwtAuthOptions options)
         {
             if (options is null)
@@ -43,6 +42,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 throw new ArgumentException(problem, nameof(options));
             }
 
+            // Copied, not read per request, so a later assignment cannot bypass the coherence check above.
             _secretProvider = options.SecretProvider;
             _tokenHeader = options.TokenHeader;
             _schemePrefix = string.IsNullOrEmpty(options.SchemePrefix) ? null : options.SchemePrefix;
@@ -58,13 +58,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             Challenge = BuildChallenge(_tokenHeader, _schemePrefix);
         }
 
-        /// <inheritdoc/>
         public string Code => "JWT";
 
-        /// <summary>RFC 6750-style <c>WWW-Authenticate</c> value for a 401.</summary>
         public string Challenge { get; }
 
-        /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {
             if (context is null)
@@ -286,21 +283,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return scheme + " realm=\"webhook\"";
         }
 
+        /// <summary>Converts a NumericDate claim to an instant widened by the clock skew, failing rather than throwing when it is out of range.</summary>
         private static bool TryUnixInstant(long seconds, TimeSpan skew, bool addSkew, out DateTimeOffset value)
         {
             value = default;
-            DateTimeOffset unix;
             try
             {
-                unix = DateTimeOffset.FromUnixTimeSeconds(seconds);
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                return false;
-            }
-
-            try
-            {
+                DateTimeOffset unix = DateTimeOffset.FromUnixTimeSeconds(seconds);
                 value = addSkew ? unix.Add(skew) : unix.Subtract(skew);
                 return true;
             }

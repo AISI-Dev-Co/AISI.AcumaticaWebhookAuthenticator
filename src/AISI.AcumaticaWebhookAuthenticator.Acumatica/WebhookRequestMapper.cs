@@ -8,15 +8,9 @@ using PX.Api.Webhooks;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// Builds a <see cref="WebhookAuthContext"/> from the platform's request object.
-    /// </summary>
     internal static class WebhookRequestMapper
     {
-        /// <summary>
-        /// Maps a request. The body must already have been read: the platform stream is
-        /// forward-only, and the buffer that was verified is the buffer that gets processed.
-        /// </summary>
+        /// <summary>Builds a <see cref="WebhookAuthContext"/> from the platform request and its already-read body.</summary>
         public static WebhookAuthContext Map(WebhookRequest request, byte[] body, DateTimeOffset receivedOn, Guid webhookId)
         {
             if (request is null)
@@ -26,9 +20,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             var headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
-            // Flatten nothing - a repeated signature header must reach extraction intact. Copied
-            // to an array so the context is independent of platform storage reuse; null elements
-            // become empty strings at this boundary.
+            // Values are copied unflattened, because a repeated signature header must reach extraction intact.
             foreach (KeyValuePair<string, StringValues> header in request.Headers)
             {
                 StringValues value = header.Value;
@@ -42,7 +34,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 headers[header.Key] = values;
             }
 
-            // WebhookRequest has no path; the handler base rejects {path} templates before any request reaches here.
+            // WebhookRequest has no path, and the handler base rejects {path} templates before any request reaches here.
             return new WebhookAuthContext(body, headers, request.Method, null, receivedOn, webhookId);
         }
     }

@@ -6,9 +6,6 @@ using PX.Data.BQL;
 using PX.Data.ReferentialIntegrity.Attributes;
 using WebHook = PX.Api.Webhooks.DAC.WebHook;
 
-// BQL field classes and audit fields are DAC boilerplate; the property summaries carry the meaning.
-#pragma warning disable CS1591
-
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
 {
     /// <summary>Signing secret and IP allowlist for one webhook registration.</summary>
@@ -16,30 +13,29 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
     [PXCacheName("Webhook Secret")]
     public class AISIWebhookSecret : PXBqlTable, IBqlTable
     {
-        /// <summary>The plaintext limit the maintenance graph enforces on entry.</summary>
+        #region Constants
         public const int SecretLength = 255;
 
-        /// <summary>Crypt column size. Ciphertext is ~2.7× plaintext plus RSA padding; 255 is not enough.</summary>
+        // RSA ciphertext is about 2.7 times the plaintext plus padding, so the column must be far wider than SecretLength.
         public const int SecretColumnLength = 2048;
+        #endregion
 
-        /// <summary>Primary key: one secret row per webhook registration.</summary>
+        #region Keys
         public class PK : PrimaryKeyOf<AISIWebhookSecret>.By<webHookID>
         {
             public static AISIWebhookSecret Find(PXGraph graph, Guid? webHookID, PKFindOptions options = PKFindOptions.None) =>
                 FindBy(graph, webHookID, options);
         }
 
-        /// <summary>Foreign keys.</summary>
         public static class FK
         {
-            /// <summary>The webhook registration this secret belongs to.</summary>
             public class WebHookRegistration : WebHook.PK.ForeignKeyOf<AISIWebhookSecret>.By<webHookID>
             {
             }
         }
+        #endregion
 
         #region WebHookID
-        /// <summary>The webhook registration this secret belongs to.</summary>
         [PXDBGuid(IsKey = true)]
         [PXDefault]
         [PXUIField(DisplayName = "Webhook")]
@@ -52,7 +48,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region Secret
-        /// <summary>The active secret, exactly as the sender's dashboard shows it.</summary>
         [PXRSACryptString(SecretColumnLength)]
         [PXDefault]
         [PXUIField(DisplayName = "Secret")]
@@ -61,7 +56,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region SecretEncoding
-        /// <summary>How <see cref="Secret"/> and <see cref="RotatingSecret"/> map to key bytes.</summary>
         [PXDBString(1, IsFixed = true, IsUnicode = false)]
         [PXDefault(SecretEncodingListAttribute.Utf8, PersistingCheck = PXPersistingCheck.Nothing)]
         [SecretEncodingList]
@@ -71,10 +65,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region RotatingSecret
-        /// <summary>
-        /// The outgoing secret during a rotation overlap, accepted alongside
-        /// <see cref="Secret"/> until <see cref="RotatingExpiresOn"/>.
-        /// </summary>
         [PXRSACryptString(SecretColumnLength)]
         [PXUIField(DisplayName = "Rotating Secret")]
         public virtual string? RotatingSecret { get; set; }
@@ -82,7 +72,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region RotatingExpiresOn
-        /// <summary>When the rotating secret stops being accepted. <c>UseTimeZone = false</c> is required — the default would shift this UTC instant.</summary>
+        // UseTimeZone = false is required, because the default would shift this UTC instant.
         [PXDBDateAndTime(UseTimeZone = false, DisplayNameDate = "Rotation Ends (UTC)", DisplayNameTime = "Rotation End Time (UTC)")]
         [PXUIField(DisplayName = "Rotation Ends (UTC)")]
         public virtual DateTime? RotatingExpiresOn { get; set; }
@@ -90,11 +80,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region AllowedAddresses
-        /// <summary>
-        /// Comma-separated addresses and CIDR blocks the sender may call from; blank means no IP
-        /// restriction. Not encrypted — policy, not credential. Only meaningful behind a trusted
-        /// front proxy that controls <see cref="ClientAddressHeader"/>.
-        /// </summary>
+        // Not encrypted, because an allowlist is policy rather than a credential.
         [PXDBString(500, IsUnicode = false)]
         [PXUIField(DisplayName = "Allowed IP Addresses")]
         public virtual string? AllowedAddresses { get; set; }
@@ -102,7 +88,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region ClientAddressHeader
-        /// <summary>The header the trusted proxy records the caller's address in.</summary>
         [PXDBString(64, IsUnicode = false)]
         [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultClientAddressHeader, PersistingCheck = PXPersistingCheck.Nothing)]
         [PXUIField(DisplayName = "Client Address Header")]
@@ -111,10 +96,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #endregion
 
         #region TrustedProxyDepth
-        /// <summary>
-        /// How many trailing header entries trusted infrastructure appended; the client address is
-        /// read at this depth from the right.
-        /// </summary>
+        // The number of trailing header entries appended by trusted proxies, so the client address is read that far from the right.
         [PXDBInt(MinValue = 1, MaxValue = 10)]
         [PXDefault(Authentication.IpAllowlistAuthenticator.DefaultTrustedProxyDepth, PersistingCheck = PXPersistingCheck.Nothing)]
         [PXUIField(DisplayName = "Trusted Proxy Depth")]

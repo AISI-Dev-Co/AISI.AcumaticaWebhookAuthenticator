@@ -13,16 +13,12 @@ namespace AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest
     {
         private readonly string _scheme;
 
-        /// <summary>Creates the handler.</summary>
-        /// <param name="scheme">The scheme code echoed in the response.</param>
-        /// <param name="maxBodyLength">Body cap in bytes.</param>
         protected SmokeTestHandlerBase(string scheme, int maxBodyLength = BoundedBodyReader.DefaultMaxLength)
             : base(maxBodyLength)
         {
             _scheme = scheme;
         }
 
-        /// <inheritdoc/>
         protected sealed override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
         {
             context.Response.StatusCode = 200;

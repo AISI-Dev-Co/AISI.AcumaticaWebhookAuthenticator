@@ -2,39 +2,30 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 {
-    /// <summary>Trace/test codes for a failed attempt. Never send these to the caller.</summary>
+    /// <summary>Trace and test codes for a failed attempt, never to be sent to the caller.</summary>
     public static class AuthFailureCode
     {
         #region Signature
-        /// <summary>The configured signature header was not present on the request.</summary>
         public const string SignatureHeaderMissing = "signature_header_missing";
 
-        /// <summary>The signature header was present but the configured element could not be found inside it.</summary>
         public const string SignatureElementMissing = "signature_element_missing";
 
-        /// <summary>The signature did not carry the configured prefix, e.g. "sha256=".</summary>
         public const string SignaturePrefixMismatch = "signature_prefix_mismatch";
 
-        /// <summary>The signature was not valid hex or base64.</summary>
         public const string SignatureMalformed = "signature_malformed";
 
-        /// <summary>The signature was well formed but did not match any candidate secret.</summary>
         public const string SignatureMismatch = "signature_mismatch";
         #endregion
 
         #region Timestamp
-        /// <summary>The scheme requires a timestamp and none was present.</summary>
         public const string TimestampMissing = "timestamp_missing";
 
-        /// <summary>The timestamp was present but could not be parsed in the configured format.</summary>
         public const string TimestampMalformed = "timestamp_malformed";
 
-        /// <summary>The timestamp fell outside the configured replay tolerance, in either direction.</summary>
         public const string TimestampOutsideTolerance = "timestamp_outside_tolerance";
         #endregion
 
         #region Template
-        /// <summary>The template referenced a header that the request did not carry.</summary>
         public const string TemplateHeaderMissing = "template_header_missing";
 
         /// <summary>The template referenced {method} but the platform did not surface one.</summary>
@@ -45,69 +36,56 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
         #endregion
 
         #region Credential
-        /// <summary>The header carrying the credential was not present on the request. Reported by the SECRET and BASIC schemes.</summary>
         public const string CredentialMissing = "credential_missing";
 
-        /// <summary>The credential was present but not in the expected shape: wrong authorization scheme, invalid base64, or a missing prefix.</summary>
+        /// <summary>The credential was present but had the wrong authorization scheme, invalid base64, or a missing prefix.</summary>
         public const string CredentialMalformed = "credential_malformed";
 
-        /// <summary>The credential was well formed but did not match any live secret.</summary>
         public const string CredentialMismatch = "credential_mismatch";
         #endregion
 
         #region JWT
-        /// <summary>The compact JWT was not three base64url segments.</summary>
         public const string JwtMalformed = "jwt_malformed";
 
         /// <summary>The header <c>alg</c> was missing, <c>none</c>, or not the configured HMAC.</summary>
         public const string JwtAlgorithmRejected = "jwt_algorithm_rejected";
 
-        /// <summary>Expiration is required and the payload has no <c>exp</c>.</summary>
         public const string JwtExpirationMissing = "jwt_expiration_missing";
 
-        /// <summary>The token's <c>exp</c> is in the past (after clock skew).</summary>
         public const string JwtExpired = "jwt_expired";
 
-        /// <summary>The token's <c>nbf</c> is in the future (after clock skew).</summary>
         public const string JwtNotYetValid = "jwt_not_yet_valid";
 
-        /// <summary>The payload <c>iss</c> did not match the configured issuer.</summary>
         public const string JwtIssuerMismatch = "jwt_issuer_mismatch";
 
-        /// <summary>The payload <c>aud</c> did not contain the configured audience.</summary>
         public const string JwtAudienceMismatch = "jwt_audience_mismatch";
 
-        /// <summary>The header carried <c>crit</c>. This verifier understands no extensions (RFC 7515 MUST).</summary>
+        /// <summary>The header carried <c>crit</c>, which RFC 7515 requires rejecting since this verifier understands no extensions.</summary>
         public const string JwtCriticalHeader = "jwt_critical_header";
 
-        /// <summary>Body-hash is required and the payload has no <c>bh</c> claim.</summary>
         public const string JwtBodyHashMissing = "jwt_body_hash_missing";
 
-        /// <summary>The <c>bh</c> claim did not match SHA-256 of the raw request body.</summary>
         public const string JwtBodyHashMismatch = "jwt_body_hash_mismatch";
         #endregion
 
         #region Client address
-        /// <summary>The configured client-address header was not present on the request.</summary>
         public const string ClientAddressMissing = "client_address_missing";
 
         /// <summary>The client-address header was present but no address could be read at the trusted depth.</summary>
         public const string ClientAddressMalformed = "client_address_malformed";
 
-        /// <summary>The client address was read but is not on the allowlist.</summary>
         public const string ClientAddressDenied = "client_address_denied";
         #endregion
 
         #region Secret and configuration
-        /// <summary>The secret provider returned nothing, so the endpoint has no secret configured.</summary>
         public const string SecretUnavailable = "secret_unavailable";
 
-        /// <summary>The configuration is incoherent. Only <see cref="WebhookSignatureTester"/> reports this; authenticators throw at construction.</summary>
+        /// <summary>The configuration can never verify a request, as reported by <see cref="WebhookSignatureTester"/> or a host that denies everything for an unusable stored setting.</summary>
         public const string Misconfigured = "misconfigured";
         #endregion
 
         #region Fallback
-        /// <summary>No more specific code. Reported only by a default-constructed <see cref="Authentication.AuthResult"/>.</summary>
+        /// <summary>No more specific code applies, as for a default <see cref="Authentication.AuthResult"/> or an authenticator that threw.</summary>
         public const string Unspecified = "unspecified";
         #endregion
     }

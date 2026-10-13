@@ -10,12 +10,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     public static class SignatureCodec
     {
         #region Encoding and decoding
-        /// <summary>Renders a digest in the given wire encoding.</summary>
-        /// <param name="digest">Raw digest bytes.</param>
-        /// <param name="encoding">Target wire encoding.</param>
-        /// <returns>The encoded signature.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="digest"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="encoding"/> is not a known value.</exception>
         public static string Encode(byte[] digest, SignatureEncoding encoding)
         {
             if (digest is null)
@@ -42,11 +36,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
             }
         }
 
-        /// <summary>Attempts to decode a signature from its wire encoding. Never throws on hostile input.</summary>
-        /// <param name="value">Encoded signature, as it appeared in the header.</param>
-        /// <param name="encoding">Wire encoding to decode from.</param>
-        /// <param name="digest">Decoded digest bytes when decoding succeeds; empty otherwise.</param>
-        /// <returns><see langword="false"/> when the value is absent or malformed.</returns>
+        /// <summary>Decodes a signature from its wire encoding, returning false rather than throwing on absent or hostile input.</summary>
         public static bool TryDecode(string? value, SignatureEncoding encoding, out byte[] digest)
         {
             digest = Array.Empty<byte>();

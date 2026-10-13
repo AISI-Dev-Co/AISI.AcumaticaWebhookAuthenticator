@@ -22,17 +22,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Factories
-        /// <summary>The whole header value is the signature. The common case.</summary>
         public static SignatureExtraction Whole { get; } = new SignatureExtraction(null, ',', '=');
 
-        /// <summary>The signature is the value of a named element in a delimited key/value list.</summary>
-        /// <param name="elementKey">Element name, e.g. "v1" for Stripe.</param>
-        /// <param name="pairSeparator">Separator between elements. Defaults to ','.</param>
-        /// <param name="keyValueSeparator">Separator between an element's name and value. Defaults to '='.</param>
-        /// <returns>The extraction mode.</returns>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="elementKey"/> is null or blank, or the two separators are equal.
-        /// </exception>
+        /// <summary>The signature is the value of a named element in a delimited key/value list, such as Stripe's <c>v1</c>.</summary>
         public static SignatureExtraction KeyValueElement(
             string elementKey,
             char pairSeparator = ',',
@@ -56,8 +48,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
         #region Extraction
         /// <summary>Pulls candidate signatures out of every value of a repeated header, each value independently.</summary>
-        /// <param name="headerValues">The raw header values, in the order they arrived.</param>
-        /// <returns>Zero or more candidate signatures.</returns>
         public IReadOnlyList<string> Extract(IReadOnlyList<string>? headerValues)
         {
             if (headerValues is null || headerValues.Count == 0)
@@ -79,9 +69,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return all;
         }
 
-        /// <summary>Pulls every candidate signature out of a single header value; Stripe sends one <c>v1</c> per active secret.</summary>
-        /// <param name="headerValue">The raw header value.</param>
-        /// <returns>Zero or more candidate signatures, in the order they appeared.</returns>
+        /// <summary>Pulls every candidate signature out of a single header value, in order, since Stripe sends one <c>v1</c> per active secret.</summary>
         public IReadOnlyList<string> Extract(string? headerValue)
         {
             if (string.IsNullOrEmpty(headerValue))

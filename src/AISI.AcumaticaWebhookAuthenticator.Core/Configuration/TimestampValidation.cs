@@ -40,26 +40,16 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             Tolerance = tolerance;
         }
 
-        /// <summary>Wire format of the timestamp.</summary>
         public TimestampFormat Format { get; }
 
-        /// <summary>Whether the timestamp is an element of the signature header, and so belongs to one header value.</summary>
+        // An element of the signature header belongs to one header value, so it is read per value rather than per request.
         public bool ReadsFromSignatureHeader => _signatureHeaderElement is object;
 
-        /// <summary>How far from the receipt time a request may be, in either direction.</summary>
         public TimeSpan Tolerance { get; }
         #endregion
 
         #region Factories
         /// <summary>The timestamp is carried in its own header.</summary>
-        /// <param name="headerName">Header name.</param>
-        /// <param name="tolerance">Replay window either side of receipt. Must not be negative.</param>
-        /// <param name="format">Wire format. Defaults to Unix seconds.</param>
-        /// <returns>The validation configuration.</returns>
-        /// <exception cref="ArgumentException"><paramref name="headerName"/> is null or blank.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="tolerance"/> is negative, or <paramref name="format"/> is undefined.
-        /// </exception>
         public static TimestampValidation FromHeader(
             string headerName,
             TimeSpan tolerance,
@@ -74,18 +64,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         }
 
         /// <summary>The timestamp is an element inside the signature header itself, as with Stripe's <c>t=</c>.</summary>
-        /// <param name="elementKey">Element name within the signature header.</param>
-        /// <param name="tolerance">Replay window either side of receipt. Must not be negative.</param>
-        /// <param name="format">Wire format. Defaults to Unix seconds.</param>
-        /// <param name="pairSeparator">Separator between elements. Defaults to ','.</param>
-        /// <param name="keyValueSeparator">Separator between an element's name and value. Defaults to '='.</param>
-        /// <returns>The validation configuration.</returns>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="elementKey"/> is null or blank, or the two separators are equal.
-        /// </exception>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="tolerance"/> is negative, or <paramref name="format"/> is undefined.
-        /// </exception>
         public static TimestampValidation FromSignatureHeaderElement(
             string elementKey,
             TimeSpan tolerance,
@@ -103,11 +81,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Reading and validation
-        /// <summary>Reads the raw timestamp text for this configuration.</summary>
-        /// <param name="context">The request.</param>
-        /// <param name="signatureHeaderValues">The signature header's values, needed when the timestamp lives inside it.</param>
-        /// <returns>The raw text, or <see langword="null"/> when absent.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+        /// <summary>Reads the raw timestamp text from its header or from the given signature header values, or null when absent.</summary>
         public string? ReadRaw(WebhookAuthContext context, IReadOnlyList<string>? signatureHeaderValues)
         {
             if (context is null)
@@ -124,10 +98,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return elements.Count > 0 ? elements[0] : null;
         }
 
-        /// <summary>Checks a raw timestamp against the replay window.</summary>
-        /// <param name="raw">The raw timestamp text, exactly as sent.</param>
-        /// <param name="receivedOn">When the request arrived.</param>
-        /// <returns>Success, or a failure carrying an <see cref="AuthFailureCode"/>.</returns>
+        /// <summary>Checks a raw timestamp against the replay window around the receipt time.</summary>
         public AuthResult Validate(string? raw, DateTimeOffset receivedOn)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -153,6 +124,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Internals
+        /// <summary>Parses raw timestamp text in the configured <see cref="Format"/>.</summary>
         private bool TryParse(string raw, out DateTimeOffset value)
         {
             value = default;

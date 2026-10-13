@@ -15,16 +15,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
             FailureCode = failureCode;
         }
 
-        /// <summary>Whether the template resolved.</summary>
         public bool Success { get; }
 
-        /// <summary>The exact bytes to sign; empty on failure. For a bare <c>{body}</c> template this is the request buffer itself, so treat it as read-only.</summary>
+        // For a bare {body} template this is the request buffer itself, so treat it as read-only.
         public byte[] Bytes { get; }
 
-        /// <summary>A human-readable rendering of the signed payload, with the body decoded lossily as UTF-8. Never sign this.</summary>
+        // The body is decoded lossily as UTF-8 for humans, so never sign this.
         public string Preview { get; }
 
-        /// <summary>An <see cref="AuthFailureCode"/> when resolution failed, otherwise empty.</summary>
         public string FailureCode { get; }
 
         internal static TemplateResolution Succeeded(byte[] bytes, string preview) =>

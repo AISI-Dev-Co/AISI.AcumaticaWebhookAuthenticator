@@ -13,46 +13,17 @@ using PX.Data;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>An <see cref="IWebhookHandler"/> that authenticates the request before <see cref="ProcessAsync"/> sees it.</summary>
-    /// <remarks>
-    /// <para>
-    /// One authenticator is built per (handler type, webhook registration) on that registration's
-    /// first request and reused; a misconfiguration throws on every request rather than denying
-    /// quietly.
-    /// </para>
-    /// <para>
-    /// Every authentication failure gets the same 401; the reason goes to <see cref="PXTrace"/> only.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// public class PushEventHandler : AuthenticatedWebhookHandlerBase
-    /// {
-    ///     protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secrets) =&gt;
-    ///         new HmacAuthenticator(WebhookAuthPresets.GitHub(secrets));
-    ///
-    ///     protected override Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation)
-    ///     {
-    ///         // context.Body holds the verified request body.
-    ///         return Task.CompletedTask;
-    ///     }
-    /// }
-    /// </code>
-    /// </example>
+    /// <summary>An <see cref="IWebhookHandler"/> that authenticates each request before <see cref="ProcessAsync"/> sees it.</summary>
     public abstract class AuthenticatedWebhookHandlerBase : IWebhookHandler
     {
         #region Construction and state
+        // One authenticator per handler type and registration, built on first request so a misconfiguration throws every time.
         private static readonly ConcurrentDictionary<(Type HandlerType, Guid WebhookId), RegistrationEntry> Registrations =
             new ConcurrentDictionary<(Type HandlerType, Guid WebhookId), RegistrationEntry>();
 
         private readonly int _maxBodyLength;
 
-        /// <summary>Creates the handler.</summary>
-        /// <param name="maxBodyLength">
-        /// Body cap in bytes. Defaults to the platform's own 1 MB limit; a tighter cap is a
-        /// refinement, a looser one is ineffective behind the platform's.
-        /// </param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxBodyLength"/> is negative.</exception>
+        // The default matches the platform's own 1 MB cap, so only a tighter cap has any effect.
         protected AuthenticatedWebhookHandlerBase(int maxBodyLength = BoundedBodyReader.DefaultMaxLength)
         {
             if (maxBodyLength < 0)
@@ -65,27 +36,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         #endregion
 
         #region Extension points
-        /// <summary>Builds the authenticator for one webhook registration, on its first request.</summary>
-        /// <param name="secretProvider">
-        /// The secret store for this registration. Pass it to the scheme's options; ignore it only
-        /// for <see cref="NoneAuthenticator"/>.
-        /// </param>
-        /// <returns>The authenticator. Must not be null.</returns>
+        /// <summary>Builds the authenticator for one webhook registration from the registration's secret provider.</summary>
         protected abstract IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secretProvider);
 
-        /// <summary>The business logic. Runs only after the request authenticated.</summary>
-        /// <param name="context">The platform context plus the request body buffer. Signature coverage depends on the scheme.</param>
-        /// <param name="cancellation">The cancellation token.</param>
+        /// <summary>Runs the business logic for a request that has already authenticated.</summary>
         protected abstract Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation);
 
-        /// <summary>Where a registration's secrets come from; defaults to <see cref="ErpSecretProvider"/>.</summary>
-        /// <param name="webhookId">The registration's <c>WebHook.WebHookID</c>.</param>
+        /// <summary>Creates the secret provider for a registration, defaulting to the Webhook Secrets screen.</summary>
         protected virtual IWebhookSecretProvider CreateSecretProvider(Guid webhookId) =>
             new ErpSecretProvider(webhookId);
         #endregion
 
         #region IWebhookHandler
-        /// <inheritdoc/>
+        // No ConfigureAwait(false) in here, because Acumatica flows tenant and PXTrace context across these awaits.
         public async Task HandleAsync(WebhookContext context, CancellationToken cancellation)
         {
             if (context is null)
@@ -94,7 +57,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
 
             // Body first, so an over-cap request costs no secret read.
-            // No ConfigureAwait(false): Acumatica flows tenant and PXTrace context across these awaits.
             BoundedBodyRead read = await BoundedBodyReader.ReadAsync(
                 context.Request.Body,
                 _maxBodyLength,
@@ -117,7 +79,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 (GetType(), context.Definition.Id),
                 BuildRegistration);
 
-            // Applied per request so allowlist edits take effect without rebuilding the authenticator.
+            // Refined per request so allowlist edits take effect without rebuilding the authenticator.
             IWebhookAuthenticator authenticator =
                 (registration.Provider as IAuthenticatorRefiner)?.Refine(registration.Authenticator)
                 ?? registration.Authenticator;
@@ -146,6 +108,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
             if (!result.Succeeded)
             {
+                // The failure reason goes to the trace only, since a sender who can tell failures apart has an oracle.
                 PXTrace.WriteWarning(
                     "Webhook authentication failed: {0} (scheme {1}, webhook {2}, trace {3}).",
                     result.FailureCode,
@@ -166,6 +129,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         #endregion
 
         #region Internals
+        /// <summary>Creates and validates the authenticator and secret provider for one registration.</summary>
         private RegistrationEntry BuildRegistration((Type HandlerType, Guid WebhookId) key)
         {
             IWebhookSecretProvider provider = CreateSecretProvider(key.WebhookId);
@@ -199,9 +163,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             public IWebhookSecretProvider Provider { get; }
         }
 
+        /// <summary>Writes a denial response with an optional WWW-Authenticate challenge.</summary>
         private static void Deny(WebhookResponse response, int statusCode, string body, string? challenge)
         {
-            // Status and headers first: the first body write flushes the head and later ones are dropped.
+            // Status and headers first, because the first body write flushes the head and later header writes are dropped.
             response.StatusCode = statusCode;
 
             if (challenge is object)

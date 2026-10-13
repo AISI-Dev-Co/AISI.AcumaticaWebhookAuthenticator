@@ -8,10 +8,7 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>
-    /// Verifies an HMAC signature over a templated payload (<c>HMAC</c>), optionally inside a replay
-    /// window (<c>HMACTS</c>). The options are snapshotted at construction; instances are immutable.
-    /// </summary>
+    /// <summary>Verifies an HMAC signature over a templated payload (<c>HMAC</c>), optionally inside a replay window (<c>HMACTS</c>).</summary>
     public sealed class HmacAuthenticator : IWebhookAuthenticator, IRequestPathDependent
     {
         #region Construction and state
@@ -24,12 +21,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         private readonly SignedPayloadTemplate _template;
         private readonly TimestampValidation? _timestamp;
 
-        /// <summary>Creates an authenticator.</summary>
-        /// <param name="options">Scheme configuration. Read once, here.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
-        /// <exception cref="ArgumentException">
-        /// The configuration is incoherent, as described by <see cref="HmacAuthOptions.DescribeMisconfiguration"/>.
-        /// </exception>
         public HmacAuthenticator(HmacAuthOptions options)
         {
             if (options is null)
@@ -56,13 +47,10 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Authentication
-        /// <inheritdoc/>
         public string Code => _timestamp is null ? "HMAC" : "HMACTS";
 
-        /// <summary>Whether the template signs <c>{path}</c>, which a host with no request path must reject up front.</summary>
         public bool RequiresRequestPath => _template.ReferencesPath;
 
-        /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {
             if (context is null)
@@ -115,10 +103,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Internals
-        /// <summary>
-        /// Pairs signature candidates with the timestamp they were signed over: one group per signature
-        /// header value when the timestamp lives in that header, otherwise one group for the request.
-        /// </summary>
+        /// <summary>Pairs signature candidates with the timestamp they were signed over, one group per header value when the timestamp lives in the signature header, otherwise one group per request.</summary>
         internal static IEnumerable<SignatureGroup> GroupCandidates(
             WebhookAuthContext context,
             IReadOnlyList<string> headerValues,
@@ -143,6 +128,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
+        /// <summary>Strips the sender prefix from and decodes each candidate, recording why any candidate was dropped.</summary>
         private List<byte[]> DecodeCandidates(IReadOnlyList<string> candidates, RejectionTracker rejection)
         {
             var decoded = new List<byte[]>(candidates.Count);

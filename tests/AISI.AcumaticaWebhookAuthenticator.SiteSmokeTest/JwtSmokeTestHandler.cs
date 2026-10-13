@@ -5,16 +5,14 @@ using AISI.AcumaticaWebhookAuthenticator.Configuration;
 
 namespace AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest
 {
-    /// <summary>Bearer JWT: HS256, required <c>bh</c> body hash and <c>aud</c> = webhook registration id.</summary>
+    /// <summary>Smoke-tests the HS256 Bearer JWT preset, which requires a <c>bh</c> body hash and an <c>aud</c> equal to the webhook id.</summary>
     public class JwtSmokeTestHandler : SmokeTestHandlerBase
     {
-        /// <summary>Creates the handler.</summary>
         public JwtSmokeTestHandler()
             : base("JWT")
         {
         }
 
-        /// <inheritdoc/>
         protected override IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secretProvider) =>
             new JwtAuthenticator(WebhookAuthPresets.JwtBearer(secretProvider));
     }

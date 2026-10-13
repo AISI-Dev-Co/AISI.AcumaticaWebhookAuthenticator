@@ -10,29 +10,22 @@ using PX.Data.BQL.Fluent;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>
-    /// Webhook secrets screen (AS301000). Stored values are write-only; a generated secret is
-    /// shown once, in a dialog.
-    /// </summary>
+    /// <summary>Webhook Secrets screen (AS301000), where stored secrets are write-only and a generated one is shown once.</summary>
     public class AISIWebhookSecretMaint : PXGraph<AISIWebhookSecretMaint, AISIWebhookSecret>
     {
-        /// <summary>How long Rotate Secret keeps the retired secret accepted, in days.</summary>
+        #region Constants
         public const int RotationOverlapDays = 7;
+        #endregion
 
-        #region Views and actions
-        /// <summary>All webhook secrets.</summary>
+        #region Selects
         public SelectFrom<AISIWebhookSecret>.View Secrets = null!;
 
-        /// <summary>The generated-secret dialog.</summary>
         public PXFilter<AISIWebhookSecretReveal> Reveal = null!;
+        #endregion
 
-        /// <summary>Replaces the secret with a random one, immediately.</summary>
+        #region Actions
         public PXAction<AISIWebhookSecret> GenerateSecret = null!;
 
-        /// <summary>Replaces the secret with a random one, keeping the old one live for <see cref="RotationOverlapDays"/>.</summary>
-        public PXAction<AISIWebhookSecret> RotateSecret = null!;
-
-        /// <summary>Handler for <see cref="GenerateSecret"/>.</summary>
         [PXButton(CommitChanges = true)]
         [PXUIField(DisplayName = "Generate Secret", MapEnableRights = PXCacheRights.Update, MapViewRights = PXCacheRights.Update)]
         protected virtual IEnumerable generateSecret(PXAdapter adapter)
@@ -45,7 +38,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             return RevealOnce(adapter);
         }
 
-        /// <summary>Handler for <see cref="RotateSecret"/>.</summary>
+        public PXAction<AISIWebhookSecret> RotateSecret = null!;
+
         [PXButton(CommitChanges = true)]
         [PXUIField(DisplayName = "Rotate Secret", MapEnableRights = PXCacheRights.Update, MapViewRights = PXCacheRights.Update)]
         protected virtual IEnumerable rotateSecret(PXAdapter adapter)
@@ -59,40 +53,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
         #endregion
 
-        #region Persistence
-        /// <inheritdoc/>
-        public override void Persist()
-        {
-            foreach (AISIWebhookSecret row in Secrets.Cache.Inserted.Cast<AISIWebhookSecret>()
-                .Concat(Secrets.Cache.Updated.Cast<AISIWebhookSecret>()))
-            {
-                EnsureDecodable(row);
-            }
-
-            base.Persist();
-        }
-        #endregion
-
-        #region Event handlers
-        /// <summary>
-        /// Rejects a secret the storage cannot hold — a silently truncated credential verifies
-        /// nothing and gives no hint why.
-        /// </summary>
+        #region Events
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.secret> e)
         {
             RejectOverlongSecret<AISIWebhookSecret.secret>(e.Cache, e.Row, e.NewValue);
         }
 
-        /// <summary>Same limit for the rotating secret.</summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.rotatingSecret> e)
         {
             RejectOverlongSecret<AISIWebhookSecret.rotatingSecret>(e.Cache, e.Row, e.NewValue);
         }
 
-        /// <summary>
-        /// Validates the allowlist with the same parser the request path uses — a typo caught here
-        /// is a red field; at request time it denies every request until fixed.
-        /// </summary>
         protected virtual void _(Events.FieldVerifying<AISIWebhookSecret, AISIWebhookSecret.allowedAddresses> e)
         {
             if (!(e.NewValue is string text) || string.IsNullOrWhiteSpace(text))
@@ -100,6 +71,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 return;
             }
 
+            // Same parser as the request path, so a typo is a red field here instead of denying every request later.
             try
             {
                 IpAllowlist.ParseCsv(text);
@@ -110,16 +82,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
             catch (ArgumentException)
             {
-                // Only separators, no entries: nothing would be allowed. Blank the field instead
-                // if no restriction is wanted.
+                // ParseCsv throws ArgumentException only when the text holds separators but no entries.
                 throw new PXSetPropertyException(e.Row, Messages.AllowlistEmpty);
             }
         }
 
-        /// <summary>
-        /// Requires the rotating-secret/expiry pair together — an overlap is supposed to close
-        /// itself.
-        /// </summary>
         protected virtual void _(Events.RowPersisting<AISIWebhookSecret> e)
         {
             if (e.Row is null || e.Operation == PXDBOperation.Delete)
@@ -130,8 +97,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             bool hasRotating = !string.IsNullOrEmpty(e.Row.RotatingSecret);
             bool hasExpiry = e.Row.RotatingExpiresOn is object;
 
-            // RaiseExceptionHandling marks the field red; the throw is what actually blocks the
-            // save - without it the row commits with the error displayed.
+            // RaiseExceptionHandling only marks the field red, so the throw is what blocks the save.
             if (hasRotating && !hasExpiry)
             {
                 e.Cache.RaiseExceptionHandling<AISIWebhookSecret.rotatingExpiresOn>(
@@ -160,7 +126,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         }
         #endregion
 
-        #region Secret generation
+        #region Methods
+        public override void Persist()
+        {
+            foreach (AISIWebhookSecret row in Secrets.Cache.Inserted.Cast<AISIWebhookSecret>()
+                .Concat(Secrets.Cache.Updated.Cast<AISIWebhookSecret>()))
+            {
+                EnsureDecodable(row);
+            }
+
+            base.Persist();
+        }
+
+        /// <summary>Returns the selected secret row, or throws when no webhook is selected.</summary>
         private AISIWebhookSecret RequireCurrent()
         {
             AISIWebhookSecret? row = Secrets.Current;
@@ -172,6 +150,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             return row;
         }
 
+        /// <summary>Saves a freshly generated secret on the row, optionally keeping the stored one live as the rotating secret.</summary>
         private void StoreNewSecret(AISIWebhookSecret row, bool rotate)
         {
             if (rotate)
@@ -207,19 +186,20 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             Reveal.Update(reveal);
         }
 
+        /// <summary>Shows the generated-secret dialog, then clears it so the secret cannot be shown again.</summary>
         private IEnumerable RevealOnce(PXAdapter adapter)
         {
             Reveal.AskExt();
             Reveal.Cache.Clear();
             return adapter.Get();
         }
-        #endregion
 
-        #region Validation
+        /// <summary>Throws when either secret on the row does not decode under the row's encoding.</summary>
         private void EnsureDecodable(AISIWebhookSecret row)
         {
             SecretEncoding encoding = SecretEncodingListAttribute.ToEncoding(row.SecretEncoding);
 
+            // An encoding-only change must re-check the stored secrets, which this cache holds encrypted.
             bool reencoded = Secrets.Cache.GetStatus(row) == PXEntryStatus.Updated
                 && !Equals(Secrets.Cache.GetValueOriginal<AISIWebhookSecret.secretEncoding>(row), row.SecretEncoding);
             AISIWebhookSecret? stored = reencoded ? ErpSecretProvider.SelectDecrypted(row.WebHookID!.Value) : null;
@@ -228,6 +208,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             EnsureDecodable<AISIWebhookSecret.rotatingSecret>(row, encoding, stored?.RotatingSecret);
         }
 
+        /// <summary>Marks the field and throws when its edited or stored value does not decode under the encoding.</summary>
         private void EnsureDecodable<TField>(AISIWebhookSecret row, SecretEncoding encoding, string? stored)
             where TField : IBqlField
         {
@@ -257,6 +238,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
         }
 
+        /// <summary>Rejects a secret longer than the column holds, since a silently truncated secret would never verify.</summary>
         private static void RejectOverlongSecret<TField>(PXCache cache, AISIWebhookSecret? row, object? newValue)
             where TField : IBqlField
         {

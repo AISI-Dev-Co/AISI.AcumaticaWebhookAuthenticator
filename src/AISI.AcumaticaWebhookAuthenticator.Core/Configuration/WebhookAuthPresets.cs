@@ -22,7 +22,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 Encoding = SignatureEncoding.Base64,
             };
 
-        /// <summary>Stripe: <c>Stripe-Signature</c> <c>t=</c>/<c>v1=</c>, hex, <c>{timestamp}.{body}</c>. Default replay window is five minutes.</summary>
+        /// <summary>Stripe: <c>Stripe-Signature</c> <c>t=</c>/<c>v1=</c>, hex, <c>{timestamp}.{body}</c>, with a five-minute default replay window.</summary>
         public static HmacAuthOptions Stripe(IWebhookSecretProvider secretProvider, TimeSpan? tolerance = null) =>
             new HmacAuthOptions(secretProvider, "Stripe-Signature")
             {
@@ -31,15 +31,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
                 Timestamp = TimestampValidation.FromSignatureHeaderElement("t", tolerance ?? TimeSpan.FromMinutes(5)),
             };
 
-        /// <summary>
-        /// <c>Authorization: Bearer</c> compact JWT (HS256). Requires <c>exp</c>, the body-hash
-        /// claim, and <c>aud</c> equal to the webhook registration id. The HTTP body is bound only via <c>bh</c>.
-        /// </summary>
+        /// <summary><c>Authorization: Bearer</c> compact JWT (HS256) requiring <c>exp</c>, <c>aud</c> equal to the webhook registration id, and the <c>bh</c> claim that alone binds the HTTP body.</summary>
         public static JwtAuthOptions JwtBearer(IWebhookSecretProvider secretProvider) =>
             new JwtAuthOptions(secretProvider);
 
         /// <summary>Same as <see cref="JwtBearer(IWebhookSecretProvider)"/> with an explicit <c>aud</c>, which wins over the webhook id.</summary>
-        /// <exception cref="ArgumentNullException"><paramref name="audience"/> is null.</exception>
         public static JwtAuthOptions JwtBearer(IWebhookSecretProvider secretProvider, string audience) =>
             new JwtAuthOptions(secretProvider)
             {

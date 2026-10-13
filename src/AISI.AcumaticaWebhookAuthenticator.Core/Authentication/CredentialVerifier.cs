@@ -7,11 +7,13 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
+    /// <summary>Header-credential verification and parsing helpers shared by the SECRET, BASIC, HMAC and JWT schemes.</summary>
     internal static class CredentialVerifier
     {
         /// <summary>Turns one header value into credential bytes, or reports it malformed.</summary>
         internal delegate bool TryDecode(string headerValue, out byte[] credential);
 
+        /// <summary>Authenticates a request by comparing every decodable value of the credential header against the secret.</summary>
         internal static AuthResult Authenticate(
             WebhookAuthContext context,
             IWebhookSecretProvider secretProvider,
@@ -54,10 +56,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
                 anyWellFormed ? AuthFailureCode.CredentialMismatch : AuthFailureCode.CredentialMalformed);
         }
 
-        /// <summary>
-        /// Strips an exact (ordinal) sender prefix, passing the value through when none is configured.
-        /// Used by the SECRET and HMAC schemes.
-        /// </summary>
+        /// <summary>Strips an exact (ordinal) sender prefix, passing the value through when none is configured.</summary>
         internal static bool TryStripPrefix(string candidate, string? prefix, out string value)
         {
             if (string.IsNullOrEmpty(prefix))
@@ -76,10 +75,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return true;
         }
 
-        /// <summary>
-        /// Strips a case-insensitive RFC 7235 auth-scheme prefix and surrounding spaces; false when
-        /// the prefix is absent or nothing follows it. Used by the BASIC and JWT schemes.
-        /// </summary>
+        /// <summary>Strips a case-insensitive RFC 7235 auth-scheme prefix and surrounding spaces, failing when the prefix is absent or nothing follows it.</summary>
         internal static bool TryStripScheme(string headerValue, string scheme, out string token)
         {
             if (!headerValue.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))

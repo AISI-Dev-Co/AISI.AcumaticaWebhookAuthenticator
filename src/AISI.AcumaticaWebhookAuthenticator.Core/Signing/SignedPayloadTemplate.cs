@@ -10,7 +10,7 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>Byte sequence the sender signs. Tokens: <c>{body}</c>, <c>{timestamp}</c>, <c>{method}</c>, <c>{path}</c>, <c>{header:Name}</c>.</summary>
+    /// <summary>Byte sequence the sender signs, built from the tokens <c>{body}</c>, <c>{timestamp}</c>, <c>{method}</c>, <c>{path}</c>, <c>{header:Name}</c>.</summary>
     public sealed class SignedPayloadTemplate
     {
         #region Construction and state
@@ -36,28 +36,19 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         #endregion
 
         #region Presets and properties
-        /// <summary>The body alone. The most common convention; GitHub and Shopify both use it.</summary>
         public static SignedPayloadTemplate Body { get; } = Parse("{body}");
 
-        /// <summary>The Stripe convention: the timestamp, a full stop, then the body.</summary>
         public static SignedPayloadTemplate TimestampDotBody { get; } = Parse("{timestamp}.{body}");
 
-        /// <summary>The template string this was parsed from.</summary>
         public string Pattern { get; }
 
-        /// <summary>Whether the template includes a <c>{timestamp}</c> token, so a replay window would be signed.</summary>
         public bool ReferencesTimestamp { get; }
 
-        /// <summary>Whether the template includes a <c>{path}</c> token, which a host with no request path cannot supply.</summary>
         public bool ReferencesPath { get; }
         #endregion
 
         #region Parsing
-        /// <summary>Parses a template.</summary>
-        /// <param name="pattern">Template string. <c>{{</c> and <c>}}</c> are literal braces.</param>
-        /// <returns>The parsed template.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="pattern"/> is null.</exception>
-        /// <exception cref="FormatException">The template is malformed or names a token that does not exist.</exception>
+        /// <summary>Parses a template string into segments, where <c>{{</c> and <c>}}</c> are literal braces.</summary>
         public static SignedPayloadTemplate Parse(string pattern)
         {
             if (pattern is null)
@@ -125,15 +116,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
         #endregion
 
         #region Resolution
-        /// <summary>Resolves the template against a request.</summary>
-        /// <param name="context">The request being authenticated.</param>
-        /// <param name="timestampRaw">
-        /// The timestamp exactly as sent, or <see langword="null"/> when the scheme has none. Never
-        /// re-format it: the sender signed the characters it sent.
-        /// </param>
-        /// <param name="capturePreview">Whether to build <see cref="TemplateResolution.Preview"/> too; a full body copy, so off on the request path.</param>
-        /// <returns>The resolution, successful or otherwise.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+        /// <summary>Resolves the template into the bytes the sender signed, building a display preview only on request because it copies the whole body.</summary>
         public TemplateResolution Resolve(WebhookAuthContext context, string? timestampRaw, bool capturePreview = false)
         {
             if (context is null)
@@ -202,6 +185,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                         return false;
                     }
 
+                    // Used verbatim, never re-formatted, because the sender signed the characters it sent.
                     text = timestampRaw;
                     return true;
 

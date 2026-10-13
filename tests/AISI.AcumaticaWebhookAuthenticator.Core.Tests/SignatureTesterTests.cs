@@ -16,7 +16,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void OnAMatch_ItReportsTheMatch()
         {
             SignatureTestReport report = WebhookSignatureTester.Test(
-                WebhookAuthPresets.GitHub(Provider(WebhookSecret.FromUtf8(GitHubSecret))),
+                WebhookAuthPresets.GitHub(new StaticSecretProvider(WebhookSecret.FromUtf8(GitHubSecret))),
                 GitHubRequest(GitHubSignature));
 
             Assert.True(report.Matched);
@@ -32,7 +32,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 .WithRotatingUtf8(GitHubRetiringSecret, DateTimeOffset.UnixEpoch.AddDays(1));
 
             SignatureTestReport report = WebhookSignatureTester.Test(
-                WebhookAuthPresets.GitHub(Provider(secret)),
+                WebhookAuthPresets.GitHub(new StaticSecretProvider(secret)),
                 GitHubRequest(GitHubRetiringSignature));
 
             Assert.True(report.Matched);
@@ -43,7 +43,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
         public void OnAMismatch_ItShowsBothSidesOfTheDiff()
         {
             SignatureTestReport report = WebhookSignatureTester.Test(
-                WebhookAuthPresets.GitHub(Provider(WebhookSecret.FromUtf8("wrong-secret"))),
+                WebhookAuthPresets.GitHub(new StaticSecretProvider(WebhookSecret.FromUtf8("wrong-secret"))),
                 GitHubRequest(GitHubSignature));
 
             Assert.False(report.Matched);
@@ -76,8 +76,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             Assert.Equal(new[] { StripeV1 }, report.ExpectedSignatures);
         }
 
-        private static StaticSecretProvider Provider(WebhookSecret secret) => new StaticSecretProvider(secret);
-
         private static string Timestamp(long seconds) => seconds.ToString(CultureInfo.InvariantCulture);
 
         private static WebhookAuthContext GitHubRequest(string signature) =>
@@ -95,7 +93,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
                 .Build();
 
             return WebhookSignatureTester.Test(
-                WebhookAuthPresets.Stripe(Provider(WebhookSecret.FromUtf8(StripeSecret))),
+                WebhookAuthPresets.Stripe(new StaticSecretProvider(WebhookSecret.FromUtf8(StripeSecret))),
                 request);
         }
     }
