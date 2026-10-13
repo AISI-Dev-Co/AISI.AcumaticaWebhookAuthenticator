@@ -17,12 +17,14 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
 
         internal static string BodyHash(byte[] body) => Base64Url(JwtAuthenticator.ComputeBodyHash(body));
 
+        /// <summary>Mints a token with the standard header for <paramref name="algorithm"/> over <paramref name="payloadJson"/>.</summary>
         internal static string Compact(HmacAlgorithm algorithm, byte[] key, string payloadJson)
         {
             string alg = algorithm == HmacAlgorithm.Sha512 ? "HS512" : "HS256";
             return Sign("{\"alg\":\"" + alg + "\",\"typ\":\"JWT\"}", payloadJson, key, algorithm);
         }
 
+        /// <summary>Mints a token from caller-supplied header and payload JSON.</summary>
         internal static string Sign(
             string headerJson,
             string payloadJson,
@@ -30,6 +32,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Tests
             HmacAlgorithm algorithm = HmacAlgorithm.Sha256) =>
             SignSegments(Base64Url(headerJson), Base64Url(payloadJson), key, algorithm);
 
+        /// <summary>Mints a token from already base64url-encoded header and payload segments.</summary>
         internal static string SignSegments(
             string headerSegment,
             string payloadSegment,

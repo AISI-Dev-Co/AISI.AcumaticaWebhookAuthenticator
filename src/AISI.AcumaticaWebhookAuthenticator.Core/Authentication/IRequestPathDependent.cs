@@ -2,7 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>True when the scheme signs <c>{path}</c>. Acumatica cannot supply a path.</summary>
+    /// <summary>A scheme that may sign <c>{path}</c>, which Acumatica cannot supply.</summary>
     public interface IRequestPathDependent
     {
         /// <summary>Whether <see cref="WebhookAuthContext.Path"/> is required to verify anything.</summary>

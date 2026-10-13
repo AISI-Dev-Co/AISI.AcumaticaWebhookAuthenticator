@@ -4,10 +4,10 @@ using AISI.AcumaticaWebhookAuthenticator.Authentication;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 {
-    /// <summary>Wraps the scheme authenticator with per-request policy (e.g. IP allowlist).</summary>
+    /// <summary>Wraps the scheme authenticator with per-request policy such as an IP allowlist.</summary>
     public interface IAuthenticatorRefiner
     {
-        /// <summary>Applies current policy around <paramref name="inner"/>.</summary>
+        /// <summary>Returns <paramref name="inner"/> wrapped in the policy currently in force.</summary>
         IWebhookAuthenticator Refine(IWebhookAuthenticator inner);
     }
 }

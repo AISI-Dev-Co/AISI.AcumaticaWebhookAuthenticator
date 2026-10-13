@@ -8,14 +8,10 @@ using AISI.AcumaticaWebhookAuthenticator.Signing;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
 {
-    /// <summary>Explains an HMAC mismatch. Contains expected signatures — never return this over HTTP.</summary>
+    /// <summary>Explains an HMAC mismatch by reporting the expected signatures, so its output must never be returned over HTTP.</summary>
     public static class WebhookSignatureTester
     {
-        /// <summary>Runs verification and reports the intermediate values.</summary>
-        /// <param name="options">The configuration to test.</param>
-        /// <param name="context">A captured request to test it against.</param>
-        /// <returns>The report.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="context"/> is null.</exception>
+        /// <summary>Runs verification of a captured request against the options and reports the intermediate values.</summary>
         public static SignatureTestReport Test(HmacAuthOptions options, WebhookAuthContext context)
         {
             if (options is null)
@@ -80,6 +76,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Diagnostics
                 provided);
         }
 
+        /// <summary>Adds the signature each live secret would produce for the resolved payload, skipping duplicates.</summary>
         private static void AppendExpected(
             List<string> expected,
             HmacAuthOptions options,

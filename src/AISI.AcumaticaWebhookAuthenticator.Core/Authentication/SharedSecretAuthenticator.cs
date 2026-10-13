@@ -6,14 +6,13 @@ using AISI.AcumaticaWebhookAuthenticator.Configuration;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>The sender puts the shared secret itself in a header. Prefer HMAC when the sender can sign.</summary>
+    /// <summary>The <c>SECRET</c> scheme, where the sender puts the shared secret itself in a header, so prefer HMAC when the sender can sign.</summary>
     public sealed class SharedSecretAuthenticator : IWebhookAuthenticator
     {
         private readonly IWebhookSecretProvider _secretProvider;
         private readonly string _secretHeader;
         private readonly CredentialVerifier.TryDecode _decode;
 
-        /// <summary>Creates an authenticator.</summary>
         public SharedSecretAuthenticator(
             IWebhookSecretProvider secretProvider,
             string secretHeader,
@@ -39,10 +38,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             };
         }
 
-        /// <inheritdoc/>
         public string Code => "SECRET";
 
-        /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {
             if (context is null)

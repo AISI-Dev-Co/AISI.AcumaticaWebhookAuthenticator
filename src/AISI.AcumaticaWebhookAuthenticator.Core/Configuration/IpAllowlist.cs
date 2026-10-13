@@ -8,7 +8,7 @@ using System.Net.Sockets;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>IP addresses and CIDR blocks. IPv4-mapped IPv6 matches the corresponding IPv4 entry.</summary>
+    /// <summary>IP addresses and CIDR blocks a client address is checked against, where IPv4-mapped IPv6 matches the corresponding IPv4 entry.</summary>
     public sealed class IpAllowlist
     {
         #region Construction and state
@@ -24,13 +24,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 
         #region Parsing
         /// <summary>Parses addresses (<c>203.0.113.7</c>, <c>2001:db8::1</c>) and CIDR blocks (<c>203.0.113.0/24</c>, <c>2001:db8::/32</c>).</summary>
-        /// <param name="entries">The entries. At least one is required.</param>
-        /// <returns>The allowlist.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="entries"/> is empty; an empty allowlist would deny every request.</exception>
-        /// <exception cref="FormatException">
-        /// An entry is not an address or CIDR block. IPv4 addresses must be four dotted decimal octets.
-        /// </exception>
         public static IpAllowlist Parse(params string[] entries)
         {
             if (entries is null)
@@ -55,12 +48,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return new IpAllowlist(parsed, string.Join(", ", entries));
         }
 
-        /// <summary>Parses a comma-separated list, as stored by the editing screen. Blank entries are skipped.</summary>
-        /// <param name="entries">Comma-separated entries, e.g. <c>203.0.113.0/24, 2001:db8::/32</c>.</param>
-        /// <returns>The allowlist.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="entries"/> contains no entries.</exception>
-        /// <exception cref="FormatException">An entry is not an address or CIDR block.</exception>
+        /// <summary>Parses a comma-separated list as stored by the editing screen, skipping blank entries.</summary>
         public static IpAllowlist ParseCsv(string entries)
         {
             if (entries is null)
@@ -84,9 +72,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
         #endregion
 
         #region Matching
-        /// <summary>Whether <paramref name="address"/> falls inside any entry.</summary>
-        /// <param name="address">The address to test. Null is never contained.</param>
-        /// <returns><see langword="true"/> when an entry contains the address.</returns>
         public bool Contains(IPAddress? address)
         {
             if (address is null)
@@ -112,12 +97,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return false;
         }
 
-        /// <summary>The entries as written, for configuration screens and traces.</summary>
-        /// <returns>The entries, comma-separated.</returns>
         public override string ToString() => _description;
         #endregion
 
         #region Internals
+        /// <summary>Parses one address or CIDR block into a network with its host bits cleared.</summary>
         private static Entry ParseEntry(string? entry)
         {
             if (string.IsNullOrWhiteSpace(entry))
@@ -172,6 +156,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return new Entry(address.AddressFamily, network, effectivePrefix);
         }
 
+        /// <summary>Parses an IPv6 address, or an IPv4 address written strictly as four dotted-decimal octets.</summary>
         private static bool TryParseAddress(string text, out IPAddress address)
         {
             if (text.IndexOf(':') >= 0)
@@ -205,6 +190,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             return true;
         }
 
+        /// <summary>Clears every bit of the address beyond the prefix length.</summary>
         private static void ZeroHostBits(byte[] network, int prefixLength)
         {
             int fullBytes = prefixLength / 8;

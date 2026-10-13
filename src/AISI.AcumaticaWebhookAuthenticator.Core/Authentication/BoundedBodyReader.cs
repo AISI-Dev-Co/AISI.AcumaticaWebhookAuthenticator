@@ -10,20 +10,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
     /// <summary>Reads a request body into a byte array, enforcing the size cap while reading.</summary>
     public static class BoundedBodyReader
     {
-        /// <summary>The platform's own inbound body cap: 1 MB.</summary>
+        // Matches the platform's own 1 MB inbound body cap.
         public const int DefaultMaxLength = 1024 * 1024;
 
         internal const int MaxInitialCapacity = 64 * 1024;
 
         private const int ChunkSize = 16 * 1024;
 
-        /// <summary>Reads <paramref name="source"/> to its end, or to the cap.</summary>
-        /// <param name="source">The body stream. Read forward-only; never assumed seekable.</param>
-        /// <param name="maxLength">The cap in bytes.</param>
-        /// <param name="declaredLength">The declared <c>Content-Length</c>, if any. A hint, not a gate.</param>
-        /// <param name="cancellation">The cancellation token.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxLength"/> is negative.</exception>
         public static async Task<BoundedBodyRead> ReadAsync(
             Stream source,
             int maxLength = DefaultMaxLength,
@@ -54,6 +47,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             }
         }
 
+        /// <summary>Validates the arguments and returns a buffer sized for the body, or null when the declared length already exceeds the cap.</summary>
         private static MemoryStream? Start(Stream source, int maxLength, long? declaredLength)
         {
             if (source is null)

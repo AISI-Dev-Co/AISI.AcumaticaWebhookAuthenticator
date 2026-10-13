@@ -4,7 +4,7 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>Authentication outcome. <see cref="FailureCode"/> is for traces, not HTTP responses.</summary>
+    /// <summary>Authentication outcome whose <see cref="FailureCode"/> is for traces, never HTTP responses.</summary>
     public readonly struct AuthResult
     {
         private readonly string? _failureCode;
@@ -15,16 +15,13 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             _failureCode = failureCode;
         }
 
-        /// <summary>Whether the request authenticated.</summary>
         public bool Succeeded { get; }
 
-        /// <summary>An <see cref="AuthFailureCode"/> value on failure (never empty), otherwise empty.</summary>
+        // A default(AuthResult) is a failure with no code, so it must still report one.
         public string FailureCode => _failureCode ?? AuthFailureCode.Unspecified;
 
-        /// <summary>Creates a successful result.</summary>
         public static AuthResult Success() => new AuthResult(true, string.Empty);
 
-        /// <summary>Creates a failed result; a blank code becomes <see cref="AuthFailureCode.Unspecified"/>.</summary>
         public static AuthResult Fail(string failureCode) =>
             new AuthResult(false, string.IsNullOrEmpty(failureCode) ? AuthFailureCode.Unspecified : failureCode);
     }

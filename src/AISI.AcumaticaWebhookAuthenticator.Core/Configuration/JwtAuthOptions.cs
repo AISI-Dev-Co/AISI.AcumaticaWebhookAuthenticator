@@ -9,18 +9,15 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
     /// <summary>Settings for <see cref="JwtAuthenticator"/>, copied at construction; later changes have no effect.</summary>
     public sealed class JwtAuthOptions
     {
-        /// <summary>Payload claim carrying the base64url SHA-256 of the raw HTTP body.</summary>
+        // The claim's value is the base64url SHA-256 of the raw HTTP body.
         public const string BodyHashClaimName = "bh";
 
-        /// <summary>Default compact-token size cap, in characters.</summary>
         public const int DefaultMaxTokenLength = 8192;
 
         internal const int MinTokenLength = 32;
 
-        /// <summary>Largest accepted <see cref="ClockSkew"/>.</summary>
         public static readonly TimeSpan MaxClockSkew = TimeSpan.FromHours(1);
 
-        /// <summary>Creates options for an <c>Authorization: Bearer</c> JWT.</summary>
         public JwtAuthOptions(IWebhookSecretProvider secretProvider, string tokenHeader = "Authorization")
         {
             if (string.IsNullOrWhiteSpace(tokenHeader))
@@ -32,37 +29,30 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             TokenHeader = tokenHeader;
         }
 
-        /// <summary>Where the JWS HMAC key comes from.</summary>
         public IWebhookSecretProvider SecretProvider { get; }
 
-        /// <summary>Header carrying the JWT.</summary>
         public string TokenHeader { get; }
 
-        /// <summary>Case-insensitive scheme before the token, or null when the header is the token itself. Defaults to <c>Bearer </c>.</summary>
+        // Matched case-insensitively; null means the header value is the token itself.
         public string? SchemePrefix { get; set; } = "Bearer ";
 
-        /// <summary>HMAC algorithm. Defaults to SHA-256 (<c>HS256</c>); SHA-1 is rejected.</summary>
         public HmacAlgorithm Algorithm { get; set; } = HmacAlgorithm.Sha256;
 
-        /// <summary>Required <c>iss</c>, or null to skip issuer checks.</summary>
+        // Null skips the issuer check entirely.
         public string? Issuer { get; set; }
 
-        /// <summary>Required <c>aud</c> (string or array member); overrides <see cref="BindAudienceToWebhookId"/>.</summary>
+        // An explicit audience wins over BindAudienceToWebhookId, which otherwise requires aud to contain the webhook registration id.
         public string? Audience { get; set; }
 
-        /// <summary>When true (the default) and <see cref="Audience"/> is null, <c>aud</c> must contain the webhook registration id.</summary>
         public bool BindAudienceToWebhookId { get; set; } = true;
 
-        /// <summary>Leeway for <c>exp</c> / <c>nbf</c>. Defaults to 60 seconds; capped at <see cref="MaxClockSkew"/>.</summary>
         public TimeSpan ClockSkew { get; set; } = TimeSpan.FromSeconds(60);
 
-        /// <summary>When true (the default), a payload without <c>exp</c> is rejected.</summary>
         public bool RequireExpiration { get; set; } = true;
 
-        /// <summary>When true (the default), <see cref="BodyHashClaimName"/> is required; a present claim is always verified.</summary>
+        // A present bh claim is always verified; this only decides whether its absence is rejected.
         public bool RequireBodyHash { get; set; } = true;
 
-        /// <summary>Maximum compact JWT length in characters. Defaults to <see cref="DefaultMaxTokenLength"/>.</summary>
         public int MaxTokenLength { get; set; } = DefaultMaxTokenLength;
 
         internal string? JwtAlgorithmName
@@ -81,7 +71,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Configuration
             }
         }
 
-        /// <summary>A developer-facing reason this configuration cannot work, or null.</summary>
+        /// <summary>A developer-facing reason this configuration cannot work, or null when it is coherent.</summary>
         public string? DescribeMisconfiguration()
         {
             if (!Enum.IsDefined(typeof(HmacAlgorithm), Algorithm))

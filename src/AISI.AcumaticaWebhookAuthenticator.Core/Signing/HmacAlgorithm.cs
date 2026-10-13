@@ -5,13 +5,11 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
     /// <summary>Hash algorithm underlying an HMAC signature scheme.</summary>
     public enum HmacAlgorithm
     {
-        /// <summary>HMAC-SHA256. The correct default; used by GitHub, Shopify, Stripe and most others.</summary>
         Sha256 = 0,
 
-        /// <summary>HMAC-SHA1. For legacy senders only; do not choose it for a new integration.</summary>
+        // Legacy senders only; never choose SHA-1 for a new integration.
         Sha1 = 1,
 
-        /// <summary>HMAC-SHA512.</summary>
         Sha512 = 2,
     }
 }

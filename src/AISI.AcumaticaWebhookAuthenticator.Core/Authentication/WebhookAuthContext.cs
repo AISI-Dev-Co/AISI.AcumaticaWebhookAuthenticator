@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>Inbound request as authenticators see it. <see cref="Body"/> is the raw arrival bytes, not a copy.</summary>
+    /// <summary>Inbound request as authenticators see it, where <see cref="Body"/> is the caller's raw array rather than a copy so it must be treated as read-only.</summary>
     public sealed class WebhookAuthContext
     {
         #region Construction and state
@@ -13,7 +13,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 
         private readonly Dictionary<string, IReadOnlyList<string>> _headers;
 
-        /// <summary>Creates a context from multi-valued headers.</summary>
         public WebhookAuthContext(
             byte[] body,
             IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
@@ -25,7 +24,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         {
         }
 
-        /// <summary>Creates a context from single-valued headers.</summary>
         public WebhookAuthContext(
             byte[] body,
             IReadOnlyDictionary<string, string> headers,
@@ -55,27 +53,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Request data
-        /// <summary>Raw request body as received: the caller's array, not a copy, so treat it as read-only.</summary>
         public byte[] Body { get; }
 
-        /// <summary>HTTP method, or <see langword="null"/> when the platform did not surface one.</summary>
         public string? Method { get; }
 
-        /// <summary>Request path, or <see langword="null"/> when the platform did not surface one.</summary>
         public string? Path { get; }
 
-        /// <summary>When the request arrived.</summary>
         public DateTimeOffset ReceivedOn { get; }
 
-        /// <summary>The webhook registration this request arrived on, when the host surfaces one.</summary>
         public Guid? WebhookId { get; }
         #endregion
 
         #region Header lookup
-        /// <summary>Looks up every value of a header, case-insensitively.</summary>
-        /// <param name="name">Header name.</param>
-        /// <param name="values">The values when present, otherwise empty. Never null.</param>
-        /// <returns><see langword="true"/> when the header is present with at least one value.</returns>
         public bool TryGetHeaderValues(string name, out IReadOnlyList<string> values)
         {
             if (name is object && _headers.TryGetValue(name, out IReadOnlyList<string> found) && found.Count > 0)
@@ -88,10 +77,6 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return false;
         }
 
-        /// <summary>Looks up a header as a single string, case-insensitively.</summary>
-        /// <param name="name">Header name.</param>
-        /// <param name="value">The value, or empty when absent. A repeated header is joined with ",".</param>
-        /// <returns><see langword="true"/> when the header is present.</returns>
         public bool TryGetHeader(string name, out string value)
         {
             if (!TryGetHeaderValues(name, out IReadOnlyList<string> values))
@@ -106,6 +91,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Header normalisation
+        /// <summary>Copies multi-valued headers into a case-insensitive dictionary with null values sanitized.</summary>
         private static Dictionary<string, IReadOnlyList<string>> Copy(
             IReadOnlyDictionary<string, IReadOnlyList<string>> headers)
         {
@@ -123,6 +109,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return copy;
         }
 
+        /// <summary>Converts single-valued headers into a case-insensitive multi-valued dictionary.</summary>
         private static Dictionary<string, IReadOnlyList<string>> Widen(
             IReadOnlyDictionary<string, string> headers)
         {
@@ -141,6 +128,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return widened;
         }
 
+        /// <summary>Replaces null header values with empty strings, returning the original list untouched when it has none.</summary>
         private static IReadOnlyList<string> Sanitize(IReadOnlyList<string>? values)
         {
             if (values is null || values.Count == 0)

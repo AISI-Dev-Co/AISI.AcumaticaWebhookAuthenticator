@@ -2,7 +2,7 @@
 
 namespace AISI.AcumaticaWebhookAuthenticator.Configuration
 {
-    /// <summary>Supplies the signing secret. Null means fail closed, never skip auth.</summary>
+    /// <summary>Supplies the signing secret, where a null secret means fail closed and never skip authentication.</summary>
     public interface IWebhookSecretProvider
     {
         /// <summary>The secret to verify against, or null when none is configured.</summary>

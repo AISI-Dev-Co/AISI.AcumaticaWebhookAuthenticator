@@ -1,12 +1,7 @@
 -- Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
---
--- Backing table for AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC.AISIWebhookSecret.
--- For development databases; the customization package's Sql item creates it on publish.
---
--- Secret and RotatingSecret hold [PXRSACryptString] ciphertext, not plaintext. Ciphertext is
--- several times the plaintext (base64 over UTF-16, plus RSA block padding), so the columns are
--- budgeted for a 255-char plaintext under site keys up to 4096 bits; the maintenance graph
--- enforces the 255-char plaintext limit on entry.
+
+-- Development databases only, because the customization package's Sql item creates this table on publish.
+-- The secret columns hold RSA ciphertext, which runs several times a 255-character plaintext under site keys up to 4096 bits.
 
 IF OBJECT_ID('dbo.AISIWebhookSecret') IS NULL
     CREATE TABLE [dbo].[AISIWebhookSecret] (
@@ -31,6 +26,6 @@ IF OBJECT_ID('dbo.AISIWebhookSecret') IS NULL
         CONSTRAINT [AISIWebhookSecret_PK] PRIMARY KEY CLUSTERED ([CompanyID], [WebHookID])
     );
 
--- Upgrade from 0.2.0. NULL reads as UTF-8, the previous behaviour.
+-- Upgrade from 0.2.0, where a NULL encoding keeps reading as UTF-8.
 IF COL_LENGTH('dbo.AISIWebhookSecret', 'SecretEncoding') IS NULL
     ALTER TABLE [dbo].[AISIWebhookSecret] ADD [SecretEncoding] CHAR(1) NULL;

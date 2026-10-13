@@ -4,15 +4,10 @@ using System.Runtime.CompilerServices;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Signing
 {
-    /// <summary>Constant-time equality for secret material. Length is not treated as secret.</summary>
+    /// <summary>Constant-time equality for secret material, where length is not treated as secret.</summary>
     public static class FixedTimeComparer
     {
-        /// <summary>Compares two byte sequences in time independent of where they first differ.</summary>
-        /// <param name="left">First sequence. May be <see langword="null"/>.</param>
-        /// <param name="right">Second sequence. May be <see langword="null"/>.</param>
-        /// <returns>
-        /// <see langword="true"/> when both are non-null, the same length and byte-for-byte equal.
-        /// </returns>
+        /// <summary>Whether both sequences are non-null and byte-for-byte equal, compared in time independent of where they first differ.</summary>
         [MethodImpl(MethodImplOptions.NoOptimization | MethodImplOptions.NoInlining)]
         public static bool AreEqual(byte[]? left, byte[]? right)
         {
@@ -26,6 +21,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Signing
                 return false;
             }
 
+            // Every byte is folded into one accumulator, and NoOptimization stops the JIT reintroducing an early exit.
             int accumulator = 0;
 
             for (int i = 0; i < left.Length; i++)

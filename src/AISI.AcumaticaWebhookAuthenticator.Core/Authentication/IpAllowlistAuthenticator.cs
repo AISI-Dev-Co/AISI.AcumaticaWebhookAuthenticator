@@ -8,27 +8,17 @@ using AISI.AcumaticaWebhookAuthenticator.Diagnostics;
 
 namespace AISI.AcumaticaWebhookAuthenticator.Authentication
 {
-    /// <summary>Restricts another authenticator to an IP allowlist read from a forwarded header (rightmost at trusted depth). Meaningful only behind a proxy you control.</summary>
+    /// <summary>Restricts another authenticator to an IP allowlist read from a forwarded header at the trusted proxy depth, so it is meaningful only behind a proxy you control.</summary>
     public sealed class IpAllowlistAuthenticator : IWebhookAuthenticator, IChallengeSource, IRequestPathDependent
     {
         #region Construction and state
-        /// <summary>The conventional forwarded-address header, used when none is configured.</summary>
         public const string DefaultClientAddressHeader = "X-Forwarded-For";
 
-        /// <summary>The default trusted depth: a single trusted proxy.</summary>
         public const int DefaultTrustedProxyDepth = 1;
 
         private readonly IpAllowlist _allowlist;
         private readonly string _clientAddressHeader;
 
-        /// <summary>Creates the gate.</summary>
-        /// <param name="inner">The authenticator that runs for allowed callers.</param>
-        /// <param name="allowlist">The allowed addresses and blocks.</param>
-        /// <param name="clientAddressHeader">The header the trusted proxy records the caller's address in.</param>
-        /// <param name="trustedProxyDepth">How many trailing entries of the header were appended by trusted infrastructure.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="inner"/> or <paramref name="allowlist"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="clientAddressHeader"/> is null or blank.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="trustedProxyDepth"/> is less than 1.</exception>
         public IpAllowlistAuthenticator(
             IWebhookAuthenticator inner,
             IpAllowlist allowlist,
@@ -56,24 +46,18 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Properties and capabilities
-        /// <summary>The authenticator that runs for allowed callers.</summary>
         public IWebhookAuthenticator Inner { get; }
 
-        /// <summary>How many trailing header entries are trusted; the client is read at this depth.</summary>
         public int TrustedProxyDepth { get; }
 
-        /// <summary>The inner scheme's code with an <c>+IP</c> suffix, so a trace shows the gate is in force.</summary>
         public string Code => Inner.Code + "+IP";
 
-        /// <summary>The inner scheme's challenge, so wrapping never silently drops it.</summary>
         public string? Challenge => (Inner as IChallengeSource)?.Challenge;
 
-        /// <summary>The inner scheme's answer, so wrapping never hides the dependency.</summary>
         public bool RequiresRequestPath => (Inner as IRequestPathDependent)?.RequiresRequestPath ?? false;
         #endregion
 
         #region Authentication
-        /// <inheritdoc/>
         public AuthResult Authenticate(WebhookAuthContext context)
         {
             if (context is null)
@@ -101,6 +85,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
         #endregion
 
         #region Address parsing
+        /// <summary>Reads the client address from the header entry at the trusted proxy depth, counted from the right.</summary>
         private bool TryReadClientAddress(IReadOnlyList<string> headerValues, out IPAddress? address)
         {
             // Repeated header lines are equivalent to one comma-joined line; walk its entries right to left.
@@ -131,6 +116,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Authentication
             return false;
         }
 
+        /// <summary>Parses one forwarded entry as a bare address, a bracketed IPv6 address with optional port, or an IPv4 address with a port.</summary>
         private static bool TryParseAddress(string text, out IPAddress? address)
         {
             address = null;
