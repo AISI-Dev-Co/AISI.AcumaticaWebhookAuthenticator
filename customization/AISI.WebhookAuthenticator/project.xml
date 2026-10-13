@@ -1,8 +1,10 @@
-<Customization level="0" description="Webhook authentication: secrets screen, DAC-backed secret storage, IP allowlists" product-version="25.200">
+<Customization level="0" description="Webhook authentication: secrets screen, DAC-backed secret storage, IP allowlists, manual retries" product-version="25.200">
   <File AppRelativePath="Bin\AISI.AcumaticaWebhookAuthenticator.Acumatica.dll" FileID="2b511cf8-58d3-46a2-958d-1d0d5453ec7d" />
   <File AppRelativePath="Bin\AISI.AcumaticaWebhookAuthenticator.Core.dll" FileID="c968a5ee-a7c2-4249-8762-7d0a74d6a969" />
   <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.html" ScreenId="AS301000" FileID="3009409d-b2e9-48ef-9445-5fc3c895a295" />
   <PerTenantFile AppRelativePath="screens\AS\AS301000\AS301000.ts" ScreenId="AS301000" FileID="4d889521-5f56-4355-9c13-2570d3f1cf60" />
+  <PerTenantFile AppRelativePath="screens\AS\AS301010\AS301010.html" ScreenId="AS301010" FileID="510a6b7c-8d9e-4f0a-b1c2-d3e4f5061728" />
+  <PerTenantFile AppRelativePath="screens\AS\AS301010\AS301010.ts" ScreenId="AS301010" FileID="621b7c8d-9e0f-401b-c2d3-e4f506172839" />
   <ScreenWithRights AccessRightsMergeRule="GrantAll">
     <data-set>
       <relations format-version="4" relations-version="20250701" main-table="SiteMap">
@@ -20,6 +22,30 @@
       <data>
         <SiteMap>
           <row Position="21521" Title="Webhook Secrets" Description="Signing secrets and IP allowlists for webhook registrations" Url="~/Scripts/Screens/AS301000.html" ScreenID="AS301000" NodeID="b3a7c2d4-5e6f-4a18-9c2b-7d8e9f0a1b2c" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D">
+            <RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
+            <RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
+          </row>
+        </SiteMap>
+      </data>
+    </data-set>
+  </ScreenWithRights>
+  <ScreenWithRights AccessRightsMergeRule="GrantAll">
+    <data-set>
+      <relations format-version="4" relations-version="20250701" main-table="SiteMap">
+        <link from="RolesInCache (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="RolesInGraph (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="RolesInMember (ScreenID)" to="SiteMap (ScreenID)" />
+      </relations>
+      <layout>
+        <table name="SiteMap">
+          <table name="RolesInCache" uplink="(ScreenID) = (ScreenID)" />
+          <table name="RolesInGraph" uplink="(ScreenID) = (ScreenID)" />
+          <table name="RolesInMember" uplink="(ScreenID) = (ScreenID)" />
+        </table>
+      </layout>
+      <data>
+        <SiteMap>
+          <row Position="21522" Title="Webhook Retries" Description="Retry authenticated webhook bodies whose processing failed" Url="~/Scripts/Screens/AS301010.html" ScreenID="AS301010" NodeID="c4b8d3e5-6f70-4b29-ad3c-8e9f0a1b2c3d" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D">
             <RolesInGraph Rolename="Administrator" ApplicationName="/" Accessrights="4" />
             <RolesInGraph Rolename="Customizer" ApplicationName="/" Accessrights="4" />
           </row>
@@ -59,6 +85,38 @@
       </data>
     </data-set>
   </SiteMapNode>
+  <SiteMapNode>
+    <data-set>
+      <relations format-version="4" relations-version="20250701" main-table="SiteMap">
+        <link from="MUIScreen (NodeID)" to="SiteMap (NodeID)" />
+        <link from="MUIWorkspace (WorkspaceID)" to="MUIScreen (WorkspaceID)" type="FromMaster" linkname="workspaceToScreen" split-location="yes" updateable="True" />
+        <link from="MUISubcategory (SubcategoryID)" to="MUIScreen (SubcategoryID)" type="FromMaster" updateable="True" />
+        <link from="MUITile (ScreenID)" to="SiteMap (ScreenID)" />
+        <link from="MUIWorkspace (WorkspaceID)" to="MUITile (WorkspaceID)" type="FromMaster" linkname="workspaceToTile" split-location="yes" updateable="True" />
+        <link from="MUIArea (AreaID)" to="MUIWorkspace (AreaID)" type="FromMaster" updateable="True" />
+        <link from="MUIPinnedScreen (NodeID, WorkspaceID)" to="MUIScreen (NodeID, WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+        <link from="MUIFavoriteWorkspace (WorkspaceID)" to="MUIWorkspace (WorkspaceID)" type="WeakIfEmpty" isEmpty="Username" />
+      </relations>
+      <layout>
+        <table name="SiteMap">
+          <table name="MUIScreen" uplink="(NodeID) = (NodeID)">
+            <table name="MUIPinnedScreen" uplink="(NodeID, WorkspaceID) = (NodeID, WorkspaceID)" />
+          </table>
+          <table name="MUITile" uplink="(ScreenID) = (ScreenID)" />
+        </table>
+        <table name="MUIWorkspace">
+          <table name="MUIFavoriteWorkspace" uplink="(WorkspaceID) = (WorkspaceID)" />
+        </table>
+        <table name="MUISubcategory" />
+        <table name="MUIArea" />
+      </layout>
+      <data>
+        <SiteMap>
+          <row Position="21522" Title="Webhook Retries" Description="Retry authenticated webhook bodies whose processing failed" Url="~/Scripts/Screens/AS301010.html" ScreenID="AS301010" NodeID="c4b8d3e5-6f70-4b29-ad3c-8e9f0a1b2c3d" ParentID="00000000-0000-0000-0000-000000000000" SelectedUI="D" />
+        </SiteMap>
+      </data>
+    </data-set>
+  </SiteMapNode>
   <Sql TableName="AISIWebhookSecret" TableSchemaXml="#CDATA">
     <CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookSecret">
     <col name="CompanyID" type="Int" default="Zero" />
@@ -79,6 +137,44 @@
     <col name="LastModifiedByScreenID" type="Char(8)" />
     <col name="LastModifiedDateTime" type="DateTime" />
     <index name="AISIWebhookSecret_PK" clustered="true" primary="true" unique="true">
+      <col name="CompanyID" />
+      <col name="WebHookID" />
+    </index>
+  </table>]]></CDATA>
+  </Sql>
+  <Sql TableName="AISIWebhookRetry" TableSchemaXml="#CDATA">
+    <CDATA name="TableSchemaXml"><![CDATA[<table name="AISIWebhookRetry">
+    <col name="CompanyID" type="Int" default="Zero" />
+    <col name="RetryID" type="Int" identity="true" />
+    <col name="WebHookID" type="UniqueIdentifier" />
+    <col name="ReceivedOn" type="DateTime" />
+    <col name="Status" type="Char(1)" />
+    <col name="AttemptCount" type="Int" default="Zero" />
+    <col name="LastAttemptOn" type="DateTime" nullable="true" />
+    <col name="TraceIdentifier" type="VarChar(64)" nullable="true" />
+    <col name="HandlerType" type="VarChar(256)" />
+    <col name="Method" type="VarChar(16)" nullable="true" />
+    <col name="ContentType" type="VarChar(128)" nullable="true" />
+    <col name="FailureMessage" type="NVarChar(1024)" nullable="true" />
+    <col name="Body" type="VarBinary(MAX)" nullable="true" />
+    <col name="NoteID" type="UniqueIdentifier" nullable="true" />
+    <col name="tstamp" type="Timestamp" />
+    <col name="CreatedByID" type="UniqueIdentifier" />
+    <col name="CreatedByScreenID" type="Char(8)" />
+    <col name="CreatedDateTime" type="DateTime" />
+    <col name="LastModifiedByID" type="UniqueIdentifier" />
+    <col name="LastModifiedByScreenID" type="Char(8)" />
+    <col name="LastModifiedDateTime" type="DateTime" />
+    <index name="AISIWebhookRetry_PK" clustered="true" primary="true" unique="true">
+      <col name="CompanyID" />
+      <col name="RetryID" />
+    </index>
+    <index name="AISIWebhookRetry_Status">
+      <col name="CompanyID" />
+      <col name="Status" />
+      <col name="ReceivedOn" />
+    </index>
+    <index name="AISIWebhookRetry_WebHook">
       <col name="CompanyID" />
       <col name="WebHookID" />
     </index>

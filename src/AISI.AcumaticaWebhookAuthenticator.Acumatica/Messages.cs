@@ -47,5 +47,22 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         public const string EncodingStandardWebhooks = "Standard Webhooks (whsec_)";
         #endregion
+
+        #region Retries
+        public const string RetryNotSaved = "The webhook retry row could not be saved.";
+
+        public const string RetryMissing = "Webhook retry {0} was not found.";
+
+        public const string RetryHandlerMissing =
+            "Handler type {0} is not loaded. Publish the customization that contains it, then retry.";
+
+        public const string RetryHandlerInvalid = "Type {0} is not an authenticated webhook handler with a public parameterless constructor.";
+        #endregion
+
+        #region Retry status labels
+        public const string RetryStatusPending = "Pending";
+
+        public const string RetryStatusSucceeded = "Succeeded";
+        #endregion
     }
 }

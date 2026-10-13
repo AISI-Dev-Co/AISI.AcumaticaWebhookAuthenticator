@@ -13,12 +13,14 @@ assemblies.
 | `Bin/AISI.AcumaticaWebhookAuthenticator.Core.dll` | `src/AISI.AcumaticaWebhookAuthenticator.Core` (`netstandard2.0`) | `File` |
 | `Bin/AISI.AcumaticaWebhookAuthenticator.Acumatica.dll` | `src/AISI.AcumaticaWebhookAuthenticator.Acumatica`, built against a site `Bin` | `File` |
 | `screens/AS/AS301000/AS301000.ts` / `.html` | [/screens/AS/AS301000](../../screens/AS/AS301000) | `PerTenantFile` |
+| `screens/AS/AS301010/AS301010.ts` / `.html` | [/screens/AS/AS301010](../../screens/AS/AS301010) | `PerTenantFile` |
 
-`project.xml` also carries the `Sql` table schema for `AISIWebhookSecret`, the site map node and
-the screen's access rights (`ScreenWithRights`), so publishing creates the table, registers the
-screen and grants the roles with no manual SQL. The site map node opens the Modern UI screen
-(`SelectedUI="D"`, `~/Scripts/Screens/AS301000.html`); publishing compiles it from the
-`PerTenantFile` HTML/TS. Access rights grant Delete (4) to Administrator and Customizer only.
+`project.xml` also carries the `Sql` table schemas for `AISIWebhookSecret` and
+`AISIWebhookRetry`, plus a site map node and access rights (`ScreenWithRights`) for each screen.
+Publishing creates the tables, registers the screens and grants the roles with no manual SQL.
+Each site map node opens the Modern UI screen (`SelectedUI="D"`,
+`~/Scripts/Screens/<ScreenID>.html`); publishing compiles it from the `PerTenantFile` HTML/TS.
+Access rights grant Delete (4) to Administrator and Customizer only.
 
 ## Building and packing
 
@@ -38,8 +40,8 @@ Then stage the layout in the table above and zip it, from the repository root:
 ```bash
 STAGE=$(mktemp -d)
 cp -r customization/AISI.WebhookAuthenticator/project.xml customization/AISI.WebhookAuthenticator/Bin "$STAGE/"
-mkdir -p "$STAGE/screens/AS/AS301000"
-cp screens/AS/AS301000/AS301000.ts screens/AS/AS301000/AS301000.html "$STAGE/screens/AS/AS301000/"
+mkdir -p "$STAGE/screens/AS"
+cp -r screens/AS/AS301000 screens/AS/AS301010 "$STAGE/screens/AS/"
 ZIP="$PWD/AISI.WebhookAuthenticator.zip"
 (cd "$STAGE" && zip -r "$ZIP" .)
 unzip -l AISI.WebhookAuthenticator.zip | grep -Ei 'PX\..*\.dll' && echo "PX assembly in the zip - do not ship it"

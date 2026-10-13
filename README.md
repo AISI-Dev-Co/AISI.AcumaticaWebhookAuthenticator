@@ -44,6 +44,8 @@ to your code.
   trusted proxy
 - **A signature debugger** — `WebhookSignatureTester` shows what was signed, what was expected
   and what arrived
+- **Manual retries** — when your code throws after a request authenticated, the body is kept and
+  an administrator replays it on Webhook Retries (AS301010)
 
 ## Getting started
 
@@ -53,7 +55,7 @@ to your code.
 2. **Customization package** — the adapter needs a site's licensed `PX.*` assemblies to compile,
    so `AISI.WebhookAuthenticator.zip` is packed locally against a 2025 R2+ site `Bin`
    ([how](customization/AISI.WebhookAuthenticator/README.md)). Import and publish it on
-   SM204505: secrets table, Webhook Secrets screen, adapter.
+   SM204505: secrets and retry tables, Webhook Secrets and Webhook Retries screens, adapter.
 3. **Write a handler** like the one above, referencing Core and the adapter.
 4. **Register the webhook** on SM304000 with your handler's type name.
 5. **Enter the secret** on AS301000. Requests that don't verify never reach your code.
@@ -191,6 +193,31 @@ new IpAllowlistAuthenticator(
 > from the *right*; everything left of that is the sender's to invent and is ignored. This is
 > defence in depth on top of a signature scheme, not authentication.
 
+## Manual retries
+
+When `ProcessAsync` throws after the request authenticated, the base class stores the body in
+`AISIWebhookRetry` ([schema](sql/AISIWebhookRetry.sql)) and answers `500`
+`{"error":"processing_failed"}`; the exception goes to the trace and the row, never to the sender.
+Requests that fail authentication (`401`) or exceed the body cap (`413`) are never stored, and
+neither is a cancelled request.
+
+On **Webhook Retries** (AS301010), **Retry** or **Retry All** runs `ProcessAsync` again on the
+stored body, method and content type. A success marks the row Succeeded and drops it from the
+screen; a failure counts the attempt and records the new error. In code,
+`AISIWebhookRetryProc.ReplayAsync(row, cancellation)` does the same for one row.
+
+A retry is not the original request:
+
+- It does not authenticate again — the body already verified once.
+- Headers, query string and caller IP were not stored, so a handler that reads
+  `context.Request.Headers` sees an empty collection.
+- It runs as the administrator who pressed Retry, inside the processing operation.
+- Write `ProcessAsync` to tolerate running twice for the same body: a failure after a partial
+  side effect, or two administrators retrying the same row, both replay it.
+
+Bodies are stored unencrypted and never shown on the screen; access is Administrator and
+Customizer, the same as Webhook Secrets. Succeeded rows stay in the table for audit.
+
 ## Debugging a mismatch
 
 ```csharp
@@ -230,7 +257,6 @@ both supported versions — the receipts are in [docs/framework-notes.md](docs/f
 
 ## Roadmap
 
-- Retries — redelivery handling for payloads whose processing failed after authenticating
 - Full payload capture to Acumatica's webhook request record, so the platform's built-in request
   log carries the complete verified body
 
