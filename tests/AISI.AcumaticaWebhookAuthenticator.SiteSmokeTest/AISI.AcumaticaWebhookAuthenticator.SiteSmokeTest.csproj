@@ -18,6 +18,26 @@
       <HintPath>$(AcumaticaBinPath)\PX.Api.Webhooks.Abstractions.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="PX.Data">
+      <HintPath>$(AcumaticaBinPath)\PX.Data.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Data.BQL.Fluent">
+      <HintPath>$(AcumaticaBinPath)\PX.Data.BQL.Fluent.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Common">
+      <HintPath>$(AcumaticaBinPath)\PX.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PX.Common.Std">
+      <HintPath>$(AcumaticaBinPath)\PX.Common.Std.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives">
+      <HintPath>$(AcumaticaBinPath)\Microsoft.Extensions.Primitives.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

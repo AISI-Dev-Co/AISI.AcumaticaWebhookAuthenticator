@@ -5,7 +5,7 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>AISI.AcumaticaWebhookAuthenticator.Acumatica</AssemblyName>
     <RootNamespace>AISI.AcumaticaWebhookAuthenticator.Acumatica</RootNamespace>
-    <Description>Acumatica ERP binding for AISI.AcumaticaWebhookAuthenticator: IWebhookHandler base with authentication, DAC-backed secret storage, and a maintenance graph.</Description>
+    <Description>Acumatica ERP binding for AISI.AcumaticaWebhookAuthenticator: IWebhookHandler base with authentication, DAC-backed secret storage, a secrets screen, and manual retries.</Description>
     <!-- Acumatica publishes no PX.* packages, so this ships in the customization package, not on NuGet. -->
     <IsPackable>false</IsPackable>
     <RequiresAcumaticaBin>true</RequiresAcumaticaBin>

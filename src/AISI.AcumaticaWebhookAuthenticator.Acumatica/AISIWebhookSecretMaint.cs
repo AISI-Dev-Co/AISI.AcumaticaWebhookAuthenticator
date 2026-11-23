@@ -26,7 +26,8 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         #region Actions
         public PXAction<AISIWebhookSecret> GenerateSecret = null!;
 
-        [PXButton(CommitChanges = true)]
+        // Modern UI shows a custom action only when it is placed on the main toolbar explicitly.
+        [PXButton(CommitChanges = true, DisplayOnMainToolbar = true)]
         [PXUIField(DisplayName = "Generate Secret", MapEnableRights = PXCacheRights.Update, MapViewRights = PXCacheRights.Update)]
         protected virtual IEnumerable generateSecret(PXAdapter adapter)
         {
@@ -40,7 +41,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         public PXAction<AISIWebhookSecret> RotateSecret = null!;
 
-        [PXButton(CommitChanges = true)]
+        [PXButton(CommitChanges = true, DisplayOnMainToolbar = true)]
         [PXUIField(DisplayName = "Rotate Secret", MapEnableRights = PXCacheRights.Update, MapViewRights = PXCacheRights.Update)]
         protected virtual IEnumerable rotateSecret(PXAdapter adapter)
         {

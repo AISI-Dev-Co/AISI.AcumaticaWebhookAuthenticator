@@ -39,7 +39,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>Builds the authenticator for one webhook registration from the registration's secret provider.</summary>
         protected abstract IWebhookAuthenticator CreateAuthenticator(IWebhookSecretProvider secretProvider);
 
-        /// <summary>Runs the business logic for a request that has already authenticated.</summary>
+        /// <summary>Runs the business logic for an authenticated request, and again on a manual retry, so it must tolerate running twice.</summary>
         protected abstract Task ProcessAsync(AuthenticatedWebhookContext context, CancellationToken cancellation);
 
         /// <summary>Creates the secret provider for a registration, defaulting to the Webhook Secrets screen.</summary>
@@ -124,7 +124,58 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
                 return;
             }
 
-            await ProcessAsync(new AuthenticatedWebhookContext(context, read.Body), cancellation);
+            try
+            {
+                await ProcessAsync(new AuthenticatedWebhookContext(context, read.Body), cancellation);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception failure)
+            {
+                // The exception stays in the trace and on the retry row, since the sender only ever sees one generic 500.
+                PXTrace.WriteError(
+                    "Webhook processing failed (webhook {0}, trace {1}, handler {2}): {3}",
+                    context.Definition.Id,
+                    context.TraceIdentifier,
+                    GetType().FullName,
+                    failure);
+
+                SaveForRetry(context, read.Body, authContext.ReceivedOn, failure);
+                Deny(context.Response, 500, "{\"error\":\"processing_failed\"}", null);
+            }
+        }
+        #endregion
+
+        #region Retries
+        /// <summary>Runs a stored authenticated body through <see cref="ProcessAsync"/> again without authenticating it.</summary>
+        internal Task ReplayAsync(WebhookContext replay, byte[] body, CancellationToken cancellation) =>
+            ProcessAsync(new AuthenticatedWebhookContext(replay, body), cancellation);
+
+        /// <summary>Stores the failed request for a manual retry on AS301010, tracing rather than throwing if the row cannot be saved.</summary>
+        private void SaveForRetry(WebhookContext context, byte[] body, DateTimeOffset receivedOn, Exception failure)
+        {
+            try
+            {
+                PXGraph.CreateInstance<AISIWebhookRetryStore>().SaveFailure(
+                    context.Definition.Id,
+                    GetType(),
+                    receivedOn,
+                    context.TraceIdentifier,
+                    context.Request.Method,
+                    context.Request.ContentType,
+                    body,
+                    failure.Message);
+            }
+            catch (Exception saveFailure)
+            {
+                PXTrace.WriteError(
+                    "Webhook processing failed and the retry row could not be saved (webhook {0}, trace {1}): {2}",
+                    context.Definition.Id,
+                    context.TraceIdentifier,
+                    saveFailure);
+            }
         }
         #endregion
 
