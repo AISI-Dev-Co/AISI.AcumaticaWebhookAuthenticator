@@ -204,7 +204,12 @@ neither is a cancelled request.
 On **Webhook Retries** (AS301010), **Retry** or **Retry All** runs `ProcessAsync` again on the
 stored body, method and content type. A success marks the row Succeeded and drops it from the
 screen; a failure counts the attempt and records the new error. In code,
-`AISIWebhookRetryProc.ReplayAsync(row, cancellation)` does the same for one row.
+`AISIWebhookRetryProc.ReplayAsync(row, cancellation)` does the same for one row. A row that
+another administrator already retried or discarded is refused rather than replayed.
+
+**Discard** marks the ticked rows Discarded after a confirmation: they leave the screen and are
+never retried, but their bodies stay in the table. Use it for a body that can never succeed, or
+for rows left behind when a webhook registration is deleted.
 
 A retry is not the original request:
 
@@ -216,7 +221,7 @@ A retry is not the original request:
   side effect, or two administrators retrying the same row, both replay it.
 
 Bodies are stored unencrypted and never shown on the screen; access is Administrator and
-Customizer, the same as Webhook Secrets. Succeeded rows stay in the table for audit.
+Customizer, the same as Webhook Secrets. Succeeded and Discarded rows stay in the table for audit.
 
 ## Debugging a mismatch
 

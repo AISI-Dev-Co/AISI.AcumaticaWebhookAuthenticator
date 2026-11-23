@@ -57,12 +57,21 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             "Handler type {0} is not loaded. Publish the customization that contains it, then retry.";
 
         public const string RetryHandlerInvalid = "Type {0} is not an authenticated webhook handler with a public parameterless constructor.";
+
+        public const string RetryNotPending = "Webhook retry {0} is no longer pending; refresh the screen.";
+
+        public const string SelectRetriesFirst = "Select at least one webhook retry.";
+
+        public const string DiscardConfirm =
+            "Discard the selected webhook retries? They will never be retried, and the stored bodies stay in the database.";
         #endregion
 
         #region Retry status labels
         public const string RetryStatusPending = "Pending";
 
         public const string RetryStatusSucceeded = "Succeeded";
+
+        public const string RetryStatusDiscarded = "Discarded";
         #endregion
     }
 }

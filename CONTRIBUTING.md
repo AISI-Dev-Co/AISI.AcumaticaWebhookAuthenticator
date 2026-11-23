@@ -32,3 +32,5 @@ when done.
 3. **Retry** on AS301010 must mark the row Succeeded, because the replay carries no headers.
 4. A signed request with `X-Retry-Smoke: replay` replays every pending row from code and reports
    the count as `"replayed"`.
+5. **Discard** on a ticked Pending row, confirmed with Yes, must mark it Discarded and drop it from
+   the grid; answering No must leave it Pending.

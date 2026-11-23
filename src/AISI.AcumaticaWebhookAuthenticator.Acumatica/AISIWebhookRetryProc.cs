@@ -1,8 +1,10 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +26,37 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
 
         #region Actions
         public PXCancel<AISIWebhookRetry> Cancel = null!;
+
+        public PXAction<AISIWebhookRetry> Discard = null!;
+
+        // Modern UI shows a custom action only when it is placed on the main toolbar explicitly.
+        [PXButton(CommitChanges = true, DisplayOnMainToolbar = true)]
+        // Update rather than Delete rights, because a processing view disallows deletes on its cache and would disable the button.
+        [PXUIField(DisplayName = "Discard", MapEnableRights = PXCacheRights.Update, MapViewRights = PXCacheRights.Update)]
+        protected virtual IEnumerable discard(PXAdapter adapter)
+        {
+            List<int> selected = Retries.Cache.Cached
+                .Cast<AISIWebhookRetry>()
+                .Where(row => row.Selected == true && row.RetryID is int)
+                .Select(row => row.RetryID!.Value)
+                .ToList();
+
+            if (selected.Count == 0)
+            {
+                throw new PXException(Messages.SelectRetriesFirst);
+            }
+
+            if (Retries.Ask(Messages.DiscardConfirm, MessageButtons.YesNo) != WebDialogResult.Yes)
+            {
+                return adapter.Get();
+            }
+
+            PXGraph.CreateInstance<AISIWebhookRetryStore>().Discard(selected);
+
+            Retries.Cache.Clear();
+            Retries.Cache.ClearQueryCache();
+            return adapter.Get();
+        }
         #endregion
 
         #region Constructors
@@ -72,9 +105,17 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             }
 
             int retryId = row.RetryID!.Value;
-            AuthenticatedWebhookHandlerBase handler = CreateHandler(row.HandlerType);
-            byte[] body = row.Body ?? Array.Empty<byte>();
-            var replay = new ReplayWebhookContext(row.WebHookID!.Value, body, row.Method, row.ContentType, row.TraceIdentifier);
+
+            // Re-read so a row discarded or retried by someone else since the grid loaded is never replayed.
+            AISIWebhookRetry? current = PXGraph.CreateInstance<AISIWebhookRetryStore>().FindCurrent(retryId);
+            if (current?.Status != AISIWebhookRetry.StatusPending)
+            {
+                throw new PXException(Messages.RetryNotPending, retryId);
+            }
+
+            AuthenticatedWebhookHandlerBase handler = CreateHandler(current.HandlerType);
+            byte[] body = current.Body ?? Array.Empty<byte>();
+            ReplayWebhookContext replay = new ReplayWebhookContext(current.WebHookID!.Value, body, current.Method, current.ContentType, current.TraceIdentifier);
 
             try
             {

@@ -4,6 +4,7 @@ import {
 	graphInfo,
 	viewInfo,
 	PXView,
+	PXActionState,
 	columnConfig,
 	gridConfig,
 	PXFieldState,
@@ -13,6 +14,8 @@ import {
 
 @graphInfo({graphType: "AISI.AcumaticaWebhookAuthenticator.Acumatica.AISIWebhookRetryProc", primaryView: "Retries"})
 export class AS301010 extends PXScreen {
+
+	Discard: PXActionState;
 
 	@viewInfo({ containerName: "Retries" })
 	Retries = createCollection(AISIWebhookRetry);

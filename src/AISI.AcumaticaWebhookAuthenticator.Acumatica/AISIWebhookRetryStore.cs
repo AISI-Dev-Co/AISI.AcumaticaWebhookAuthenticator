@@ -1,6 +1,7 @@
 // Copyright (c) 2026 AISI Dev Co. Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC;
 using PX.Data;
 using PX.Data.BQL.Fluent;
@@ -27,7 +28,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             byte[] body,
             string failureMessage)
         {
-            var row = new AISIWebhookRetry
+            AISIWebhookRetry row = new AISIWebhookRetry
             {
                 WebHookID = webhookId,
                 HandlerType = Truncate(handlerType.FullName, AISIWebhookRetry.HandlerTypeLength),
@@ -48,6 +49,27 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
             Persist();
         }
 
+        /// <summary>Re-reads a retry row from the database, so a replay never acts on a stale grid copy.</summary>
+        internal AISIWebhookRetry? FindCurrent(int retryId) => AISIWebhookRetry.PK.Find(this, retryId);
+
+        /// <summary>Marks the still-pending rows among <paramref name="retryIds"/> as discarded, leaving rows that finished meanwhile untouched.</summary>
+        internal void Discard(IEnumerable<int> retryIds)
+        {
+            foreach (int retryId in retryIds)
+            {
+                AISIWebhookRetry? row = FindCurrent(retryId);
+                if (row?.Status != AISIWebhookRetry.StatusPending)
+                {
+                    continue;
+                }
+
+                row.Status = AISIWebhookRetry.StatusDiscarded;
+                Retries.Update(row);
+            }
+
+            Persist();
+        }
+
         internal void MarkSucceeded(int retryId) => RecordAttempt(retryId, succeeded: true, failureMessage: null);
 
         internal void MarkFailedAgain(int retryId, string failureMessage) => RecordAttempt(retryId, succeeded: false, failureMessage);
@@ -55,7 +77,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica
         /// <summary>Counts one retry attempt on the row, completing it on success or recording the new failure.</summary>
         private void RecordAttempt(int retryId, bool succeeded, string? failureMessage)
         {
-            AISIWebhookRetry? row = AISIWebhookRetry.PK.Find(this, retryId);
+            AISIWebhookRetry? row = FindCurrent(retryId);
             if (row is null)
             {
                 throw new PXException(Messages.RetryMissing, retryId);

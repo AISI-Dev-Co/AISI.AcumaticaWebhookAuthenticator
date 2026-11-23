@@ -36,7 +36,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.SiteSmokeTest
             int replayed = 0;
             if (HasSmokeValue(context.Request, ReplayValue))
             {
-                var graph = PXGraph.CreateInstance<AISIWebhookRetryProc>();
+                AISIWebhookRetryProc graph = PXGraph.CreateInstance<AISIWebhookRetryProc>();
                 foreach (AISIWebhookRetry row in graph.Retries.Select())
                 {
                     await AISIWebhookRetryProc.ReplayAsync(row, cancellation);

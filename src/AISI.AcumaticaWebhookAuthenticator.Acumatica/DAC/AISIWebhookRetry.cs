@@ -16,6 +16,7 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #region Constants
         public const string StatusPending = "P";
         public const string StatusSucceeded = "S";
+        public const string StatusDiscarded = "D";
 
         public const int HandlerTypeLength = 256;
         public const int TraceIdentifierLength = 64;
@@ -86,7 +87,9 @@ namespace AISI.AcumaticaWebhookAuthenticator.Acumatica.DAC
         #region Status
         [PXDBString(1, IsFixed = true, IsUnicode = false)]
         [PXDefault(StatusPending)]
-        [PXStringList(new[] { StatusPending, StatusSucceeded }, new[] { Messages.RetryStatusPending, Messages.RetryStatusSucceeded })]
+        [PXStringList(
+            new[] { StatusPending, StatusSucceeded, StatusDiscarded },
+            new[] { Messages.RetryStatusPending, Messages.RetryStatusSucceeded, Messages.RetryStatusDiscarded })]
         [PXUIField(DisplayName = "Status", Enabled = false)]
         public virtual string? Status { get; set; }
         public abstract class status : BqlString.Field<status> { }
